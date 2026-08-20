@@ -66,9 +66,9 @@ const SCHEDULE = {
   },
   // Headway model, as described by the user: every 3' at peak, every 5' otherwise.
   // This is the frequency on the shared trunk. Once the Kalamaria extension is
-  // live, departures alternate branch A / branch B, so each branch individually
-  // sees half that frequency — the same way real Y-shaped metro branches split
-  // a shared trunk service.
+  // live, departures split 2:1 in favour of branch B (Kalamaria) over branch A
+  // (Νέα Ελβετία) — a confirmed real-world ratio, not a 50/50 guess. See
+  // branchForDeparture() in app.js.
   peakHeadwayMin: 3,
   offPeakHeadwayMin: 5,
   // Peak windows apply on weekdays only (Mon-Fri). Assumption, tune freely.

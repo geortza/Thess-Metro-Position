@@ -133,11 +133,13 @@ function buildDepartures(openDec, closeDec, dow) {
   return list;
 }
 
-// Departures alternate branch destination once the extension is live; before
-// that every train runs the only branch that exists (A, to Νέα Ελβετία).
+// Confirmed real-world split once the extension is live: of every 3 trains
+// heading east, 2 go to the Kalamaria extension (branch B) and 1 to Νέα
+// Ελβετία (branch A). Before that, every train runs the only branch that
+// exists (A, to Νέα Ελβετία).
 function branchForDeparture(index, ext) {
   if (!ext) return "A";
-  return index % 2 === 0 ? "A" : "B";
+  return index % 3 === 0 ? "A" : "B";
 }
 
 // Full round-trip timeline for one physical train, keyed off its westbound
