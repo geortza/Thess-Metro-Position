@@ -145,92 +145,99 @@ html, body {
   overflow: hidden;
 }
 
-#metro-map { width: 100%; height: auto; display: block; }
+#metro-map {
+  width: 100%;
+  height: 640px;
+  border-radius: 12px;
+  background: var(--bg-alt);
+}
 
-/* Below this width the map keeps a fixed pixel size and scrolls horizontally
-   instead of shrinking — otherwise station labels become illegible. */
 @media (max-width: 760px) {
-  .map-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  #metro-map { width: 900px; max-width: none; }
+  #metro-map { height: 62vh; min-height: 380px; }
 }
 
-.line-path {
-  fill: none;
-  stroke: url(#lineGradient);
-  stroke-width: 6;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 10px rgba(18,199,184,0.25));
+/* Leaflet chrome, restyled to match the dark panel look */
+.leaflet-container {
+  background: var(--bg-alt);
+  font-family: var(--font);
 }
 
-.line-path--ext {
-  stroke-dasharray: 3 10;
-  opacity: 0.45;
-  transition: opacity 0.6s ease, stroke-dasharray 0.6s ease;
+.leaflet-control-zoom a {
+  background: rgba(12, 20, 36, 0.9) !important;
+  color: var(--ink) !important;
+  border-color: var(--panel-border) !important;
 }
 
-.map--extended .line-path--ext {
-  stroke-dasharray: none;
-  opacity: 1;
+.leaflet-control-zoom a:hover { background: rgba(255,255,255,0.12) !important; }
+
+.leaflet-control-attribution {
+  background: rgba(7, 11, 20, 0.7) !important;
+  color: var(--ink-faint) !important;
+  font-size: 10.5px !important;
 }
+
+.leaflet-control-attribution a { color: var(--ink-dim) !important; }
+
+/* Station markers (Leaflet divIcon) */
+.station-marker { cursor: pointer; }
 
 .station-dot {
-  fill: #0c1424;
-  stroke: var(--teal);
-  stroke-width: 3;
-  transition: r 0.15s ease, stroke 0.3s ease;
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: var(--bg-alt);
+  border: 3px solid var(--teal);
+  transition: transform 0.15s ease, border-color 0.3s ease, background 0.15s ease;
 }
 
-.station--ext .station-dot { stroke: var(--amber); stroke-dasharray: 2 2; }
-.map--extended .station--ext .station-dot { stroke: var(--teal); stroke-dasharray: none; }
+.station-dot--big { inset: 3px; }
 
 .station-ring {
-  fill: none;
-  stroke: rgba(18,199,184,0.35);
-  stroke-width: 2;
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(18, 199, 184, 0.35);
 }
 
-.station-ring--junction {
-  stroke: rgba(255, 182, 72, 0.5);
-  stroke-dasharray: 2 3;
+.station-marker--junction .station-dot { border-color: var(--amber); background: var(--bg-alt); }
+.station-marker--junction .station-ring { border-color: rgba(255, 182, 72, 0.5); border-style: dashed; }
+
+.station-marker--ext .station-dot { border-color: var(--amber); border-style: dashed; }
+.station-marker--ext.station-marker--live .station-dot { border-color: var(--teal); border-style: solid; }
+
+.station-marker:hover .station-dot,
+.station-marker--selected .station-dot { transform: scale(1.35); }
+.station-marker--selected .station-dot { background: var(--teal); }
+
+.station-tooltip {
+  background: rgba(7, 11, 20, 0.88) !important;
+  border: 1px solid var(--panel-border) !important;
+  color: var(--ink-dim) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  padding: 3px 8px !important;
+  box-shadow: none !important;
+  border-radius: 6px !important;
 }
 
-.station--junction .station-dot {
-  fill: var(--bg-alt);
-  stroke: var(--amber);
-}
+.station-tooltip::before { display: none !important; }
 
-.station { cursor: pointer; outline: none; }
-.station:hover .station-dot, .station--selected .station-dot { r: 9; stroke-width: 4; }
-.station--selected .station-dot { fill: var(--teal); }
-
-.station-label {
-  font-family: var(--font);
-  font-size: 13px;
-  font-weight: 500;
-  fill: var(--ink-dim);
-  transition: fill 0.15s ease;
-}
-
-.station:hover .station-label, .station--selected .station-label { fill: var(--ink); }
-.station-label--left { text-anchor: end; }
-.station-label--center { text-anchor: middle; }
-
+/* Train markers */
 .train-marker {
   transition: transform 0.95s linear, opacity 0.4s ease;
+  pointer-events: none;
 }
 
-.train-glow {
-  fill: rgba(59, 139, 255, 0.28);
+.train-glow, .train-core {
+  position: absolute;
+  border-radius: 50%;
 }
 
-.train-core {
-  fill: var(--blue);
-  stroke: #dff0ff;
-  stroke-width: 1.5;
-}
+.train-glow { inset: 0; background: rgba(59, 139, 255, 0.28); }
+.train-core { inset: 6px; background: var(--blue); border: 1.5px solid #dff0ff; }
 
-.train-marker--west .train-glow { fill: rgba(18, 199, 184, 0.3); }
-.train-marker--west .train-core { fill: var(--teal); }
+.train-marker--west .train-glow { background: rgba(18, 199, 184, 0.3); }
+.train-marker--west .train-core { background: var(--teal); }
 
 .legend {
   display: flex;
@@ -349,5 +356,5 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .train-marker, .line-path--ext, .station-dot { transition: none !important; }
+  .train-marker, .station-dot { transition: none !important; }
 }

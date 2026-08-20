@@ -85,7 +85,6 @@ const BRANCH_H = { A: SCHEDULE.branchTimeMin.A / 60, B: SCHEDULE.branchTimeMin.B
 const TURN_H = SCHEDULE.turnaroundMin / 60;
 
 function branchArray(b) { return b === "A" ? PATH_A : PATH_B; }
-function branchTerminus(b) { return b === "A" ? TERMINUS_A : TERMINUS_B; }
 
 /* ---------------------------------------------------------------------- *
  *  Service-day resolution & headway model
@@ -157,25 +156,9 @@ function journeyFor(d, branch) {
 }
 
 /* ---------------------------------------------------------------------- *
- *  Map geometry
+ *  Real-map geometry helpers (interpolate along consecutive stations'
+ *  actual lat/lng — a straight-line approximation between real stops).
  * ---------------------------------------------------------------------- */
-
-function catmullRomPath(points) {
-  if (points.length < 2) return "";
-  let d = `M ${points[0].x},${points[0].y} `;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(i - 1, 0)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(i + 2, points.length - 1)];
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += `C ${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y} `;
-  }
-  return d.trim();
-}
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 
@@ -185,98 +168,110 @@ function positionAlong(points, frac) {
   const i1 = Math.min(i0 + 1, points.length - 1);
   const t = idx - i0;
   return {
-    x: lerp(points[i0].x, points[i1].x, t),
-    y: lerp(points[i0].y, points[i1].y, t),
+    lat: lerp(points[i0].lat, points[i1].lat, t),
+    lng: lerp(points[i0].lng, points[i1].lng, t),
   };
 }
 
 /* ---------------------------------------------------------------------- *
- *  App state & rendering
+ *  Map (Leaflet, real OpenStreetMap-based tiles)
  * ---------------------------------------------------------------------- */
 
-const svgNS = "http://www.w3.org/2000/svg";
-let departureCache = { key: null, list: [] };
+let map;
+const stationMarkers = {};
 let markerPool = [];
 let selectedStationId = null;
+const linePolylines = {};
 
-function buildStaticMap() {
-  document.getElementById("line-path-trunk").setAttribute("d", catmullRomPath(TRUNK));
-  document.getElementById("line-path-a").setAttribute("d", catmullRomPath(PATH_A));
-  document.getElementById("line-path-ext").setAttribute("d", catmullRomPath(PATH_B));
+const TOOLTIP_OFFSET = {
+  right: [12, 0], left: [-12, 0], top: [0, -10], bottom: [0, 12],
+};
 
-  const stationsLayer = document.getElementById("stations-layer");
-  stationsLayer.innerHTML = "";
+function buildMap() {
+  map = L.map("metro-map", { zoomControl: true, scrollWheelZoom: true, minZoom: 11, maxZoom: 18 });
+
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: "abcd",
+    maxZoom: 19,
+  }).addTo(map);
+
+  const bounds = L.latLngBounds(STATIONS.map((s) => [s.lat, s.lng]));
+  map.fitBounds(bounds, { padding: [36, 36] });
+
+  linePolylines.trunk = L.polyline(TRUNK.map((s) => [s.lat, s.lng]), {
+    color: "#12c7b8", weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round",
+  }).addTo(map);
+  linePolylines.a = L.polyline(PATH_A.map((s) => [s.lat, s.lng]), {
+    color: "#3b8bff", weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round",
+  }).addTo(map);
+  linePolylines.ext = L.polyline(PATH_B.map((s) => [s.lat, s.lng]), {
+    color: "#ffb648", weight: 4, opacity: 0.55, dashArray: "2 10", lineCap: "round", lineJoin: "round",
+  }).addTo(map);
+
   STATIONS.forEach((s) => {
-    const g = document.createElementNS(svgNS, "g");
-    g.setAttribute("class", "station" + (s.extension ? " station--ext" : "") + (s.junction ? " station--junction" : ""));
-    g.setAttribute("data-id", s.id);
-    g.setAttribute("tabindex", "0");
-    g.setAttribute("role", "button");
-    g.setAttribute("aria-label", s.name + (s.junction ? " (διακλάδωση)" : ""));
-
-    const hitArea = document.createElementNS(svgNS, "circle");
-    hitArea.setAttribute("cx", s.x);
-    hitArea.setAttribute("cy", s.y);
-    hitArea.setAttribute("r", 20);
-    hitArea.setAttribute("fill", "transparent");
-    g.appendChild(hitArea);
-
-    const dot = document.createElementNS(svgNS, "circle");
-    dot.setAttribute("cx", s.x);
-    dot.setAttribute("cy", s.y);
-    dot.setAttribute("r", s.terminus ? 9 : s.junction ? 7.5 : 6.5);
-    dot.setAttribute("class", "station-dot");
-    g.appendChild(dot);
-
-    if (s.terminus || s.junction) {
-      const ring = document.createElementNS(svgNS, "circle");
-      ring.setAttribute("cx", s.x);
-      ring.setAttribute("cy", s.y);
-      ring.setAttribute("r", 14);
-      ring.setAttribute("class", "station-ring" + (s.junction ? " station-ring--junction" : ""));
-      g.appendChild(ring);
-    }
-
-    const labelPos = s.labelPos || (s.x > 600 ? "left" : "right");
-    const label = document.createElementNS(svgNS, "text");
-    const offsets = {
-      right: { x: 12, y: 4, anchor: "" },
-      left: { x: -12, y: 4, anchor: " station-label--left" },
-      above: { x: 0, y: -14, anchor: " station-label--center" },
-      below: { x: 0, y: 22, anchor: " station-label--center" },
-    }[labelPos];
-    label.setAttribute("x", s.x + offsets.x);
-    label.setAttribute("y", s.y + offsets.y);
-    label.setAttribute("class", "station-label" + offsets.anchor);
-    label.textContent = s.short;
-    g.appendChild(label);
-
-    g.addEventListener("click", () => selectStation(s.id));
-    g.addEventListener("keypress", (e) => { if (e.key === "Enter") selectStation(s.id); });
-
-    stationsLayer.appendChild(g);
+    const big = s.terminus || s.junction;
+    const icon = L.divIcon({
+      className: "station-marker" + (s.extension ? " station-marker--ext" : "") + (s.junction ? " station-marker--junction" : ""),
+      html: `<span class="station-dot${big ? " station-dot--big" : ""}"></span>${big ? '<span class="station-ring"></span>' : ""}`,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+    });
+    const marker = L.marker([s.lat, s.lng], { icon, keyboard: true, alt: s.name, riseOnHover: true });
+    marker.addTo(map);
+    const dir = s.labelPos || "right";
+    marker.bindTooltip(s.short, {
+      permanent: false, direction: dir, className: "station-tooltip", offset: TOOLTIP_OFFSET[dir] || [12, 0],
+    });
+    marker.on("click", () => selectStation(s.id));
+    marker.on("keypress", (e) => { if (e.originalEvent.key === "Enter") selectStation(s.id); });
+    stationMarkers[s.id] = marker;
   });
 
-  // Pre-create a pool of train markers reused every tick.
-  const trainsLayer = document.getElementById("trains-layer");
-  trainsLayer.innerHTML = "";
+  // Real station spacing is a few hundred metres, so permanent labels only
+  // make sense once zoomed in far enough to not overlap; below that, names
+  // still show on hover/tap.
+  const LABEL_ZOOM_THRESHOLD = 14;
+  const updateTooltipVisibility = () => {
+    const show = map.getZoom() >= LABEL_ZOOM_THRESHOLD;
+    Object.values(stationMarkers).forEach((m) => (show ? m.openTooltip() : m.closeTooltip()));
+  };
+  map.on("zoomend", updateTooltipVisibility);
+  updateTooltipVisibility();
+
   markerPool = [];
   for (let i = 0; i < 40; i++) {
-    const g = document.createElementNS(svgNS, "g");
-    g.setAttribute("class", "train-marker");
-    g.style.opacity = "0";
-    const glow = document.createElementNS(svgNS, "circle");
-    glow.setAttribute("r", 11);
-    glow.setAttribute("class", "train-glow");
-    const core = document.createElementNS(svgNS, "circle");
-    core.setAttribute("r", 5.5);
-    core.setAttribute("class", "train-core");
-    g.appendChild(glow);
-    g.appendChild(core);
-    trainsLayer.appendChild(g);
-    markerPool.push(g);
+    const icon = L.divIcon({
+      className: "train-marker",
+      html: '<span class="train-glow"></span><span class="train-core"></span>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+    const m = L.marker([WEST_TERMINUS.lat, WEST_TERMINUS.lng], { icon, interactive: false, keyboard: false });
+    m.addTo(map);
+    m.setOpacity(0);
+    markerPool.push(m);
   }
+
+  window.addEventListener("resize", () => map.invalidateSize());
 }
+
+function updateExtensionLineStyle(ext) {
+  linePolylines.ext.setStyle(ext ? { dashArray: null, opacity: 0.92, color: "#12c7b8" } : { dashArray: "2 10", opacity: 0.55, color: "#ffb648" });
+  Object.entries(stationMarkers).forEach(([id, marker]) => {
+    const s = STATIONS.find((st) => st.id === id);
+    if (!s.extension) return;
+    const el = marker.getElement();
+    if (el) el.classList.toggle("station-marker--live", ext);
+  });
+}
+
+/* ---------------------------------------------------------------------- *
+ *  Ticking / rendering
+ * ---------------------------------------------------------------------- */
+
+let departureCache = { key: null, list: [] };
+let lastExt = null;
 
 function tick() {
   const parts = athensParts();
@@ -285,7 +280,7 @@ function tick() {
 
   renderStatusBar(parts, sw);
   renderExtensionBanner(parts, ext);
-  document.getElementById("metro-map").classList.toggle("map--extended", ext);
+  if (ext !== lastExt) { updateExtensionLineStyle(ext); lastExt = ext; }
 
   if (!sw.open) {
     hideAllTrains();
@@ -322,11 +317,11 @@ function scheduleNextTick() {
 }
 
 function hideAllTrains() {
-  for (const m of markerPool) m.style.opacity = "0";
+  for (const m of markerPool) m.setOpacity(0);
 }
 
-// Where is a single train (departure d, branch b) right now? Returns a
-// {x,y,direction} or null if it isn't running at `now`.
+// Where is a single train (departure d, branch b) right now? Returns
+// {lat,lng,direction} or null if it isn't running at `now`.
 function trainStateAt(d, branch, now) {
   const j = journeyFor(d, branch);
   const brPoints = branchArray(branch);
@@ -365,11 +360,12 @@ function renderTrains(departures, now, ext) {
     if (!state) continue;
     if (used >= markerPool.length) break;
     const marker = markerPool[used++];
-    marker.style.transform = `translate(${state.x}px, ${state.y}px)`;
-    marker.style.opacity = "1";
-    marker.classList.toggle("train-marker--west", state.direction === "west");
+    marker.setLatLng([state.lat, state.lng]);
+    marker.setOpacity(1);
+    const el = marker.getElement();
+    if (el) el.classList.toggle("train-marker--west", state.direction === "west");
   }
-  for (let i = used; i < markerPool.length; i++) markerPool[i].style.opacity = "0";
+  for (let i = used; i < markerPool.length; i++) markerPool[i].setOpacity(0);
 }
 
 function renderStatusBar(parts, sw) {
@@ -419,8 +415,9 @@ function renderExtensionBanner(parts, ext) {
 
 function selectStation(id) {
   selectedStationId = selectedStationId === id ? null : id;
-  document.querySelectorAll(".station").forEach((el) => {
-    el.classList.toggle("station--selected", el.getAttribute("data-id") === selectedStationId);
+  Object.entries(stationMarkers).forEach(([sid, marker]) => {
+    const el = marker.getElement();
+    if (el) el.classList.toggle("station-marker--selected", sid === selectedStationId);
   });
   document.getElementById("station-panel-empty").hidden = !!selectedStationId;
   document.getElementById("station-panel-content").hidden = !selectedStationId;
@@ -518,7 +515,7 @@ function renderStationPanel(id, ctx, ext) {
  * ---------------------------------------------------------------------- */
 
 document.addEventListener("DOMContentLoaded", () => {
-  buildStaticMap();
+  buildMap();
   document.getElementById("close-panel").addEventListener("click", () => selectStation(selectedStationId));
   requestAnimationFrame(scheduleNextTick);
 });

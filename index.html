@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -37,19 +38,7 @@
 
   <main class="layout">
     <section class="map-card">
-      <svg id="metro-map" viewBox="0 0 1200 660" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Χάρτης γραμμής Μετρό Θεσσαλονίκης με θέσεις συρμών">
-        <defs>
-          <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#12c7b8"/>
-            <stop offset="100%" stop-color="#3b8bff"/>
-          </linearGradient>
-        </defs>
-        <path id="line-path-trunk" class="line-path"></path>
-        <path id="line-path-a" class="line-path"></path>
-        <path id="line-path-ext" class="line-path line-path--ext"></path>
-        <g id="trains-layer"></g>
-        <g id="stations-layer"></g>
-      </svg>
+      <div id="metro-map" role="img" aria-label="Πραγματικός χάρτης της Θεσσαλονίκης με τη γραμμή του Μετρό και τις θέσεις των συρμών"></div>
 
       <div class="legend">
         <div class="legend-item"><span class="legend-swatch legend-swatch--line"></span> Γραμμή 1</div>
@@ -82,6 +71,7 @@
     </p>
   </footer>
 
+  <script src="vendor/leaflet/leaflet.js"></script>
   <script src="js/data.js"></script>
   <script src="js/app.js"></script>
 </body>

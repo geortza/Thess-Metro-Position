@@ -15,34 +15,35 @@
  * off earlier, at 25ης Μαρτίου.
  *
  * Sources (checked Aug 2026): thessmetro.gr, Hellenic Metro (emetro.gr),
- * and Greek press coverage of the Kalamaria extension opening.
+ * and Greek press coverage of the Kalamaria extension opening. Station
+ * coordinates are the published lat/lon of each station from its English
+ * Wikipedia article infobox (real geographic positions, not schematic).
  */
 
-// Hand-placed schematic coordinates (not geographic), viewBox 0 0 1200 660.
 const STATIONS = [
   // --- Trunk: western terminus -> fork at 25ης Μαρτίου ---
-  { id: "nsс", name: "Νέος Σιδηροδρομικός Σταθμός", short: "Ν. Σιδηροδρομικός Σταθμός", x: 60,  y: 120, branch: "trunk", terminus: "west" },
-  { id: "dim", name: "Δημοκρατίας",                   short: "Δημοκρατίας",                x: 175, y: 180, branch: "trunk" },
-  { id: "ven", name: "Βενιζέλου",                      short: "Βενιζέλου",                  x: 290, y: 230, branch: "trunk" },
-  { id: "ags", name: "Αγία Σοφία",                     short: "Αγία Σοφία",                 x: 400, y: 265, branch: "trunk", labelPos: "above" },
-  { id: "sin", name: "Σιντριβάνι",                     short: "Σιντριβάνι",                 x: 500, y: 292, branch: "trunk", labelPos: "below" },
-  { id: "pan", name: "Πανεπιστήμιο",                   short: "Πανεπιστήμιο",               x: 620, y: 292, branch: "trunk", labelPos: "above" },
-  { id: "pap", name: "Παπάφειο",                       short: "Παπάφειο",                   x: 715, y: 268, branch: "trunk", labelPos: "below" },
-  { id: "efk", name: "Ευκλείδης",                      short: "Ευκλείδης",                  x: 780, y: 235, branch: "trunk" },
-  { id: "fle", name: "Φλέμιγκ",                        short: "Φλέμιγκ",                    x: 850, y: 190, branch: "trunk" },
-  { id: "ana", name: "Ανάληψη",                        short: "Ανάληψη",                    x: 905, y: 240, branch: "trunk" },
-  { id: "mar", name: "25ης Μαρτίου",                   short: "25ης Μαρτίου",               x: 955, y: 288, branch: "trunk", junction: true, labelPos: "above" },
+  { id: "nsс", name: "Νέος Σιδηροδρομικός Σταθμός", short: "Ν. Σιδηροδρομικός Σταθμός", lat: 40.64361, lng: 22.92917, branch: "trunk", terminus: "west" },
+  { id: "dim", name: "Δημοκρατίας",                   short: "Δημοκρατίας",                lat: 40.64111, lng: 22.93417, branch: "trunk" },
+  { id: "ven", name: "Βενιζέλου",                      short: "Βενιζέλου",                  lat: 40.63694, lng: 22.94194, branch: "trunk" },
+  { id: "ags", name: "Αγία Σοφία",                     short: "Αγία Σοφία",                 lat: 40.63444, lng: 22.94639, branch: "trunk" },
+  { id: "sin", name: "Σιντριβάνι",                     short: "Σιντριβάνι",                 lat: 40.63056, lng: 22.95417, branch: "trunk", labelPos: "below" },
+  { id: "pan", name: "Πανεπιστήμιο",                   short: "Πανεπιστήμιο",               lat: 40.62611, lng: 22.96000, branch: "trunk" },
+  { id: "pap", name: "Παπάφειο",                       short: "Παπάφειο",                   lat: 40.61972, lng: 22.96250, branch: "trunk" },
+  { id: "efk", name: "Ευκλείδης",                      short: "Ευκλείδης",                  lat: 40.61611, lng: 22.96028, branch: "trunk", labelPos: "left" },
+  { id: "fle", name: "Φλέμιγκ",                        short: "Φλέμιγκ",                    lat: 40.60917, lng: 22.95722, branch: "trunk", labelPos: "left" },
+  { id: "ana", name: "Ανάληψη",                        short: "Ανάληψη",                    lat: 40.60556, lng: 22.95778, branch: "trunk", labelPos: "left" },
+  { id: "mar", name: "25ης Μαρτίου",                   short: "25ης Μαρτίου",               lat: 40.60056, lng: 22.95833, branch: "trunk", junction: true, labelPos: "left" },
 
   // --- Branch A: fork -> Νέα Ελβετία (already in service) ---
-  { id: "vou", name: "Βούλγαρη",  short: "Βούλγαρη",   x: 1000, y: 340, branch: "A" },
-  { id: "nel", name: "Νέα Ελβετία", short: "Νέα Ελβετία", x: 1040, y: 405, branch: "A", terminus: "east-a" },
+  { id: "vou", name: "Βούλγαρη",    short: "Βούλγαρη",    lat: 40.59444, lng: 22.96083, branch: "A" },
+  { id: "nel", name: "Νέα Ελβετία", short: "Νέα Ελβετία", lat: 40.59306, lng: 22.96861, branch: "A", terminus: "east-a" },
 
   // --- Branch B: fork -> Kalamaria extension (opens 27/08/2026) ---
-  { id: "nom", name: "Νομαρχία",   short: "Νομαρχία",   x: 900, y: 365, branch: "B", extension: true },
-  { id: "kal", name: "Καλαμαριά",  short: "Καλαμαριά",  x: 850, y: 425, branch: "B", extension: true },
-  { id: "are", name: "Αρετσού",    short: "Αρετσού",    x: 795, y: 470, branch: "B", extension: true },
-  { id: "nkr", name: "Νέα Κρήνη",  short: "Νέα Κρήνη",  x: 725, y: 495, branch: "B", extension: true },
-  { id: "mik", name: "Μίκρα",      short: "Μίκρα",      x: 650, y: 500, branch: "B", extension: true, terminus: "east-b" },
+  { id: "nom", name: "Νομαρχία",   short: "Νομαρχία",   lat: 40.59139, lng: 22.95694, branch: "B", extension: true, labelPos: "left" },
+  { id: "kal", name: "Καλαμαριά",  short: "Καλαμαριά",  lat: 40.58472, lng: 22.95306, branch: "B", extension: true, labelPos: "left" },
+  { id: "are", name: "Αρετσού",    short: "Αρετσού",    lat: 40.57861, lng: 22.95444, branch: "B", extension: true, labelPos: "left" },
+  { id: "nkr", name: "Νέα Κρήνη",  short: "Νέα Κρήνη",  lat: 40.57250, lng: 22.96111, branch: "B", extension: true },
+  { id: "mik", name: "Μίκρα",      short: "Μίκρα",      lat: 40.56833, lng: 22.96583, branch: "B", extension: true, terminus: "east-b" },
 ];
 
 // Athens local calendar date/time the Kalamaria extension enters commercial service.
