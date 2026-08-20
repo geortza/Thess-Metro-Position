@@ -65,11 +65,13 @@ const SCHEDULE = {
     6: { hour: 26, minute: 0 }, // Sat -> 02:00 Sun
   },
   // Headway model, as described by the user: every 3' at peak, every 5' otherwise.
-  // This is the frequency on the shared trunk. Once the Kalamaria extension is
-  // live, departures split 2:1 in favour of branch B (Kalamaria) over branch A
-  // (Νέα Ελβετία) — a confirmed real-world ratio, not a 50/50 guess. See
-  // branchForDeparture() in app.js.
+  // This is the frequency on the shared trunk. Per the operator, peak headway
+  // tightens to 1.5' once the Kalamaria extension is live (offPeakHeadwayMin
+  // is unaffected). Departures then split 2:1 in favour of branch B
+  // (Kalamaria) over branch A (Νέα Ελβετία) — a confirmed real-world ratio,
+  // not a 50/50 guess. See branchForDeparture() in app.js.
   peakHeadwayMin: 3,
+  peakHeadwayMinExtended: 1.5,
   offPeakHeadwayMin: 5,
   // Peak windows apply on weekdays only (Mon-Fri). Assumption, tune freely.
   peakWindowsWeekday: [

@@ -110,24 +110,26 @@ function resolveServiceWindow(parts) {
   return { open: true, dow, dateKey: `${parts.year}-${parts.month}-${parts.day}`, openDec: OPEN_DEC, closeDec: close, nowDecAdj: nowDec };
 }
 
-function headwayMinutesAt(hourDec, dow) {
+function headwayMinutesAt(hourDec, dow, ext) {
   const isWeekday = dow >= 1 && dow <= 5;
   if (isWeekday) {
     for (const [s, e] of SCHEDULE.peakWindowsWeekday) {
       const sh = decHour(s), eh = decHour(e);
-      if (hourDec >= sh && hourDec < eh) return SCHEDULE.peakHeadwayMin;
+      if (hourDec >= sh && hourDec < eh) {
+        return ext ? SCHEDULE.peakHeadwayMinExtended : SCHEDULE.peakHeadwayMin;
+      }
     }
   }
   return SCHEDULE.offPeakHeadwayMin;
 }
 
-function buildDepartures(openDec, closeDec, dow) {
+function buildDepartures(openDec, closeDec, dow, ext) {
   const list = [];
   let t = openDec;
   let guard = 0;
-  while (t <= closeDec && guard < 2000) {
+  while (t <= closeDec && guard < 4000) {
     list.push(t);
-    t += headwayMinutesAt(t % 24, dow) / 60;
+    t += headwayMinutesAt(t % 24, dow, ext) / 60;
     guard++;
   }
   return list;
@@ -272,7 +274,7 @@ function updateExtensionLineStyle(ext) {
  *  Ticking / rendering
  * ---------------------------------------------------------------------- */
 
-let departureCache = { key: null, list: [] };
+let departureCache = { key: null, ext: null, list: [] };
 let lastExt = null;
 
 function tick() {
@@ -293,12 +295,12 @@ function tick() {
     return;
   }
 
-  if (departureCache.key !== sw.dateKey) {
-    departureCache = { key: sw.dateKey, list: buildDepartures(sw.openDec, sw.closeDec, sw.dow) };
+  if (departureCache.key !== sw.dateKey || departureCache.ext !== ext) {
+    departureCache = { key: sw.dateKey, ext, list: buildDepartures(sw.openDec, sw.closeDec, sw.dow, ext) };
   }
 
   const now = sw.nowDecAdj;
-  renderHeadwayPill(headwayMinutesAt(now % 24, sw.dow));
+  renderHeadwayPill(headwayMinutesAt(now % 24, sw.dow, ext));
   const activeCount = renderTrains(departureCache.list, now, ext);
   renderFleetPill(activeCount, ext);
 
@@ -355,6 +357,10 @@ function trainStateAt(d, branch, now) {
 }
 
 function renderTrains(departures, now, ext) {
+  // The headway/branch-split math can imply more trains "in the system" than
+  // the real fleet has (tight peak headways leave little spare margin) — cap
+  // rendering at the known fleet size rather than show more trains than exist.
+  const fleetCap = Math.min(markerPool.length, FLEET.base + (ext ? FLEET.extensionExtra : 0));
   let used = 0;
   for (let i = 0; i < departures.length; i++) {
     const d = departures[i];
@@ -362,7 +368,7 @@ function renderTrains(departures, now, ext) {
     const branch = branchForDeparture(i, ext);
     const state = trainStateAt(d, branch, now);
     if (!state) continue;
-    if (used >= markerPool.length) break;
+    if (used >= fleetCap) break;
     const marker = markerPool[used++];
     marker.setLatLng([state.lat, state.lng]);
     marker.setOpacity(1);
@@ -395,7 +401,7 @@ function renderHeadwayPill(minutes) {
     el.className = "pill pill--muted";
     return;
   }
-  const isPeak = minutes === SCHEDULE.peakHeadwayMin;
+  const isPeak = minutes === SCHEDULE.peakHeadwayMin || minutes === SCHEDULE.peakHeadwayMinExtended;
   el.textContent = `${isPeak ? "Ώρα αιχμής" : "Κανονικό ωράριο"} · ανά ${minutes}′`;
   el.className = "pill " + (isPeak ? "pill--peak" : "pill--offpeak");
 }
