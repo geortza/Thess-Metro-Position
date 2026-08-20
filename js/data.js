@@ -73,6 +73,11 @@ const SCHEDULE = {
   peakHeadwayMin: 3,
   peakHeadwayMinExtended: 1.5,
   offPeakHeadwayMin: 5,
+  // Per the operator: extra trains join service from the depot near Νέα
+  // Ελβετία ahead of each peak window, so the interval tightens gradually
+  // rather than snapping instantly. Confirmed range was 10-15'; using the
+  // midpoint. See buildRampInsertions() in app.js.
+  rampMinutes: 12,
   // Peak windows apply on weekdays only (Mon-Fri). Assumption, tune freely.
   peakWindowsWeekday: [
     [{ hour: 7, minute: 0 }, { hour: 9, minute: 30 }],

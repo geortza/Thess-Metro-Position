@@ -84,6 +84,8 @@ const TRUNK_H = SCHEDULE.trunkTimeMin / 60;
 const BRANCH_H = { A: SCHEDULE.branchTimeMin.A / 60, B: SCHEDULE.branchTimeMin.B / 60 };
 const TURN_H = SCHEDULE.turnaroundMin / 60;
 
+const NE_TO_NSS_H = BRANCH_H.A + TRUNK_H; // Νέα Ελβετία -> Ν.Σ.Σ. travel time
+
 function branchArray(b) { return b === "A" ? PATH_A : PATH_B; }
 
 /* ---------------------------------------------------------------------- *
@@ -123,6 +125,33 @@ function headwayMinutesAt(hourDec, dow, ext) {
   return SCHEDULE.offPeakHeadwayMin;
 }
 
+// Trains inserted from the Νέα Ελβετία depot ahead of a peak window: each
+// entry is { leaveNE, arriveNSS }. They travel branch A + trunk west to
+// Ν. Σιδηροδρομικός Σταθμός and from `arriveNSS` on are indistinguishable
+// from a regular departure — buildDepartures merges that arrival time
+// straight into the main list, so all downstream logic (journeyFor, branch
+// assignment, station arrivals) treats them identically from then on.
+function buildRampInsertions(openDec, closeDec, dow, ext) {
+  const inserts = [];
+  if (!(dow >= 1 && dow <= 5)) return inserts; // peak windows are weekday-only
+  const rampH = SCHEDULE.rampMinutes / 60;
+  for (const [s, e] of SCHEDULE.peakWindowsWeekday) {
+    const peakStart = decHour(s);
+    const targetHeadway = ext ? SCHEDULE.peakHeadwayMinExtended : SCHEDULE.peakHeadwayMin;
+    const rampStart = peakStart - rampH;
+    let t = Math.max(rampStart, openDec);
+    let guard = 0;
+    while (t < peakStart && t <= closeDec && guard < 200) {
+      const frac = Math.min(Math.max((t - rampStart) / rampH, 0), 1);
+      const headway = lerp(SCHEDULE.offPeakHeadwayMin, targetHeadway, frac);
+      inserts.push({ leaveNE: t, arriveNSS: t + NE_TO_NSS_H });
+      t += headway / 60;
+      guard++;
+    }
+  }
+  return inserts;
+}
+
 function buildDepartures(openDec, closeDec, dow, ext) {
   const list = [];
   let t = openDec;
@@ -132,7 +161,10 @@ function buildDepartures(openDec, closeDec, dow, ext) {
     t += headwayMinutesAt(t % 24, dow, ext) / 60;
     guard++;
   }
-  return list;
+  const ramp = buildRampInsertions(openDec, closeDec, dow, ext);
+  for (const r of ramp) list.push(r.arriveNSS);
+  list.sort((a, b) => a - b);
+  return { list, ramp };
 }
 
 // Confirmed real-world split once the extension is live: of every 3 trains
@@ -274,7 +306,7 @@ function updateExtensionLineStyle(ext) {
  *  Ticking / rendering
  * ---------------------------------------------------------------------- */
 
-let departureCache = { key: null, ext: null, list: [] };
+let departureCache = { key: null, ext: null, list: [], ramp: [] };
 let lastExt = null;
 
 function tick() {
@@ -296,12 +328,13 @@ function tick() {
   }
 
   if (departureCache.key !== sw.dateKey || departureCache.ext !== ext) {
-    departureCache = { key: sw.dateKey, ext, list: buildDepartures(sw.openDec, sw.closeDec, sw.dow, ext) };
+    const built = buildDepartures(sw.openDec, sw.closeDec, sw.dow, ext);
+    departureCache = { key: sw.dateKey, ext, list: built.list, ramp: built.ramp };
   }
 
   const now = sw.nowDecAdj;
   renderHeadwayPill(headwayMinutesAt(now % 24, sw.dow, ext));
-  const activeCount = renderTrains(departureCache.list, now, ext);
+  const activeCount = renderTrains(departureCache.list, departureCache.ramp, now, ext);
   renderFleetPill(activeCount, ext);
 
   if (selectedStationId) {
@@ -356,12 +389,38 @@ function trainStateAt(d, branch, now) {
   return null;
 }
 
-function renderTrains(departures, now, ext) {
+// Position of a train still on its pre-service leg from the Νέα Ελβετία
+// depot to Ν.Σ.Σ. (branch A, then trunk, both westbound) — null once it's
+// arrived, at which point it's just a normal entry in the departures list.
+function rampTrainStateAt(insert, now) {
+  if (now < insert.leaveNE || now >= insert.arriveNSS) return null;
+  const branchEnd = insert.leaveNE + BRANCH_H.A;
+  if (now <= branchEnd) {
+    const frac = 1 - (now - insert.leaveNE) / BRANCH_H.A;
+    return positionAlong(PATH_A, frac);
+  }
+  const frac = 1 - (now - branchEnd) / TRUNK_H;
+  return positionAlong(TRUNK, frac);
+}
+
+function renderTrains(departures, ramp, now, ext) {
   // The headway/branch-split math can imply more trains "in the system" than
   // the real fleet has (tight peak headways leave little spare margin) — cap
   // rendering at the known fleet size rather than show more trains than exist.
   const fleetCap = Math.min(markerPool.length, FLEET.base + (ext ? FLEET.extensionExtra : 0));
   let used = 0;
+
+  for (const insert of ramp) {
+    if (used >= fleetCap) break;
+    const pos = rampTrainStateAt(insert, now);
+    if (!pos) continue;
+    const marker = markerPool[used++];
+    marker.setLatLng([pos.lat, pos.lng]);
+    marker.setOpacity(1);
+    const el = marker.getElement();
+    if (el) el.classList.toggle("train-marker--branch-b", false);
+  }
+
   for (let i = 0; i < departures.length; i++) {
     const d = departures[i];
     if (d > now) break;
