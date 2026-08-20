@@ -10,8 +10,8 @@
   --blue: #3b8bff;
   --amber: #ffb648;
   --red: #ff6161;
-  --train-east: #ff4fa3;
-  --train-west: #b98cff;
+  --train-a: #ff4fa3;
+  --train-b: #a3e635;
   --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, monospace;
 }
@@ -237,10 +237,10 @@ html, body {
 }
 
 .train-glow { inset: 0; background: rgba(255, 79, 163, 0.3); }
-.train-core { inset: 6px; background: var(--train-east); border: 1.5px solid #ffe3f1; }
+.train-core { inset: 6px; background: var(--train-a); border: 1.5px solid #ffe3f1; }
 
-.train-marker--west .train-glow { background: rgba(185, 140, 255, 0.32); }
-.train-marker--west .train-core { background: var(--train-west); border-color: #ece1ff; }
+.train-marker--branch-b .train-glow { background: rgba(163, 230, 53, 0.32); }
+.train-marker--branch-b .train-core { background: var(--train-b); border-color: #eefccb; }
 
 .legend {
   display: flex;
@@ -258,8 +258,8 @@ html, body {
 .legend-swatch--ext { background: repeating-linear-gradient(90deg, var(--amber) 0 4px, transparent 4px 9px); }
 
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.legend-dot--east { background: var(--train-east); }
-.legend-dot--west { background: var(--train-west); }
+.legend-dot--a { background: var(--train-a); }
+.legend-dot--b { background: var(--train-b); }
 
 /* ---------------------------------------------------------------------- */
 /* Station panel */

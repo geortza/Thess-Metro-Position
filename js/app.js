@@ -373,7 +373,7 @@ function renderTrains(departures, now, ext) {
     marker.setLatLng([state.lat, state.lng]);
     marker.setOpacity(1);
     const el = marker.getElement();
-    if (el) el.classList.toggle("train-marker--west", state.direction === "west");
+    if (el) el.classList.toggle("train-marker--branch-b", branch === "B");
   }
   for (let i = used; i < markerPool.length; i++) markerPool[i].setOpacity(0);
   return used;
