@@ -152,6 +152,42 @@ function buildRampInsertions(openDec, closeDec, dow, ext) {
   return inserts;
 }
 
+// Mirror of the ramp-up: after each peak window ends, branch-A trains
+// arriving at Νέα Ελβετία are progressively pulled into the depot instead
+// of turning around, thinning the westbound flow back down to the off-peak
+// headway over the same ramp window rather than letting every peak-era
+// train complete its full ~40' round trip regardless. Only Νέα Ελβετία
+// arrivals are affected — no equivalent info for the Kalamaria branch.
+function buildRampRemovals(list, dow, ext) {
+  const removed = new Set();
+  if (!(dow >= 1 && dow <= 5)) return removed;
+  const rampH = SCHEDULE.rampMinutes / 60;
+  const arrivalOffset = TRUNK_H + BRANCH_H.A; // Ν.Σ.Σ. departure -> Νέα Ελβετία arrival
+  const peakHeadway = ext ? SCHEDULE.peakHeadwayMinExtended : SCHEDULE.peakHeadwayMin;
+  for (const [, e] of SCHEDULE.peakWindowsWeekday) {
+    const peakEnd = decHour(e);
+    const rampEnd = peakEnd + rampH;
+    const candidates = [];
+    list.forEach((d, i) => {
+      if (branchForDeparture(i, ext) !== "A") return;
+      const arrival = d + arrivalOffset;
+      if (arrival >= peakEnd && arrival < rampEnd) candidates.push({ d, arrival });
+    });
+    candidates.sort((a, b) => a.arrival - b.arrival);
+    let nextAllowed = -Infinity;
+    for (const c of candidates) {
+      if (c.arrival >= nextAllowed) {
+        const frac = Math.min(Math.max((c.arrival - peakEnd) / rampH, 0), 1);
+        const targetHeadway = lerp(peakHeadway, SCHEDULE.offPeakHeadwayMin, frac);
+        nextAllowed = c.arrival + targetHeadway / 60;
+      } else {
+        removed.add(c.d);
+      }
+    }
+  }
+  return removed;
+}
+
 function buildDepartures(openDec, closeDec, dow, ext) {
   const list = [];
   let t = openDec;
@@ -164,7 +200,8 @@ function buildDepartures(openDec, closeDec, dow, ext) {
   const ramp = buildRampInsertions(openDec, closeDec, dow, ext);
   for (const r of ramp) list.push(r.arriveNSS);
   list.sort((a, b) => a - b);
-  return { list, ramp };
+  const removed = buildRampRemovals(list, dow, ext);
+  return { list, ramp, removed };
 }
 
 // Confirmed real-world split once the extension is live: of every 3 trains
@@ -306,7 +343,7 @@ function updateExtensionLineStyle(ext) {
  *  Ticking / rendering
  * ---------------------------------------------------------------------- */
 
-let departureCache = { key: null, ext: null, list: [], ramp: [] };
+let departureCache = { key: null, ext: null, list: [], ramp: [], removed: new Set() };
 let lastExt = null;
 
 function tick() {
@@ -329,16 +366,16 @@ function tick() {
 
   if (departureCache.key !== sw.dateKey || departureCache.ext !== ext) {
     const built = buildDepartures(sw.openDec, sw.closeDec, sw.dow, ext);
-    departureCache = { key: sw.dateKey, ext, list: built.list, ramp: built.ramp };
+    departureCache = { key: sw.dateKey, ext, list: built.list, ramp: built.ramp, removed: built.removed };
   }
 
   const now = sw.nowDecAdj;
   renderHeadwayPill(headwayMinutesAt(now % 24, sw.dow, ext));
-  const activeCount = renderTrains(departureCache.list, departureCache.ramp, now, ext);
+  const activeCount = renderTrains(departureCache.list, departureCache.ramp, departureCache.removed, now, ext);
   renderFleetPill(activeCount, ext);
 
   if (selectedStationId) {
-    renderStationPanel(selectedStationId, { departures: departureCache.list, now, ext }, ext);
+    renderStationPanel(selectedStationId, { departures: departureCache.list, removed: departureCache.removed, now, ext }, ext);
   }
 
   requestAnimationFrame(scheduleNextTick);
@@ -360,11 +397,14 @@ function hideAllTrains() {
 }
 
 // Where is a single train (departure d, branch b) right now? Returns
-// {lat,lng,direction} or null if it isn't running at `now`.
-function trainStateAt(d, branch, now) {
+// {lat,lng,direction} or null if it isn't running at `now`. `removed` is the
+// set of departures that get pulled into the Νέα Ελβετία depot instead of
+// turning around (post-peak thinning) — they vanish once they arrive there.
+function trainStateAt(d, branch, now, removed) {
   const j = journeyFor(d, branch);
   const brPoints = branchArray(branch);
   const brH = BRANCH_H[branch];
+  const isRemoved = removed && removed.has(d);
 
   if (now >= j.eastTrunkStart && now <= j.eastTrunkEnd) {
     const frac = (now - j.eastTrunkStart) / TRUNK_H;
@@ -374,6 +414,7 @@ function trainStateAt(d, branch, now) {
     const frac = (now - j.eastBranchStart) / brH;
     return { ...positionAlong(brPoints, frac), direction: "east" };
   }
+  if (isRemoved) return null; // pulled into the depot at Νέα Ελβετία, doesn't return
   if (now > j.eastBranchEnd && now < j.westBranchStart) {
     // Laid over at the branch terminus.
     return { ...positionAlong(brPoints, 1), direction: "east" };
@@ -403,7 +444,7 @@ function rampTrainStateAt(insert, now) {
   return positionAlong(TRUNK, frac);
 }
 
-function renderTrains(departures, ramp, now, ext) {
+function renderTrains(departures, ramp, removed, now, ext) {
   // The headway/branch-split math can imply more trains "in the system" than
   // the real fleet has (tight peak headways leave little spare margin) — cap
   // rendering at the known fleet size rather than show more trains than exist.
@@ -425,7 +466,7 @@ function renderTrains(departures, ramp, now, ext) {
     const d = departures[i];
     if (d > now) break;
     const branch = branchForDeparture(i, ext);
-    const state = trainStateAt(d, branch, now);
+    const state = trainStateAt(d, branch, now, removed);
     if (!state) continue;
     if (used >= fleetCap) break;
     const marker = markerPool[used++];
@@ -504,7 +545,7 @@ function selectStation(id) {
 // stations can be served by trains ultimately bound for either branch
 // terminus, so eastbound is grouped by final destination.
 function nextArrivals(station, n, ctx) {
-  const { departures, now, ext } = ctx;
+  const { departures, removed, now, ext } = ctx;
   const west = [];
   const eastByBranch = { A: [], B: [] };
 
@@ -515,13 +556,14 @@ function nextArrivals(station, n, ctx) {
     const d = departures[i];
     const branch = branchForDeparture(i, ext);
     const brH = BRANCH_H[branch];
+    const isRemoved = removed && removed.has(d);
 
     if (station.branch === "trunk") {
       const eastArr = d + (trunkIdx / trunkLen) * TRUNK_H;
       const j = journeyFor(d, branch);
       const westArr = j.westBranchEnd + ((trunkLen - trunkIdx) / trunkLen) * TRUNK_H;
       if (eastArr >= now) eastByBranch[branch].push(eastArr);
-      if (westArr >= now) west.push(westArr);
+      if (!isRemoved && westArr >= now) west.push(westArr);
     } else if (station.branch === branch) {
       const pts = branchArray(branch);
       const localIdx = pts.findIndex((s) => s.id === station.id);
@@ -530,7 +572,7 @@ function nextArrivals(station, n, ctx) {
       const j = journeyFor(d, branch);
       const westArr = j.westBranchStart + ((branchLen - localIdx) / branchLen) * brH;
       if (eastArr >= now) eastByBranch[branch].push(eastArr);
-      if (westArr >= now) west.push(westArr);
+      if (!isRemoved && westArr >= now) west.push(westArr);
     }
   }
 
