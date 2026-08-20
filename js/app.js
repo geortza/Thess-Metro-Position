@@ -285,6 +285,7 @@ function tick() {
   if (!sw.open) {
     hideAllTrains();
     renderHeadwayPill(null);
+    renderFleetPill(0, ext);
     if (selectedStationId) renderStationPanel(selectedStationId, null, ext);
     requestAnimationFrame(scheduleNextTick);
     return;
@@ -296,7 +297,8 @@ function tick() {
 
   const now = sw.nowDecAdj;
   renderHeadwayPill(headwayMinutesAt(now % 24, sw.dow));
-  renderTrains(departureCache.list, now, ext);
+  const activeCount = renderTrains(departureCache.list, now, ext);
+  renderFleetPill(activeCount, ext);
 
   if (selectedStationId) {
     renderStationPanel(selectedStationId, { departures: departureCache.list, now, ext }, ext);
@@ -366,6 +368,7 @@ function renderTrains(departures, now, ext) {
     if (el) el.classList.toggle("train-marker--west", state.direction === "west");
   }
   for (let i = used; i < markerPool.length; i++) markerPool[i].setOpacity(0);
+  return used;
 }
 
 function renderStatusBar(parts, sw) {
@@ -393,6 +396,12 @@ function renderHeadwayPill(minutes) {
   const isPeak = minutes === SCHEDULE.peakHeadwayMin;
   el.textContent = `${isPeak ? "Ώρα αιχμής" : "Κανονικό ωράριο"} · ανά ${minutes}′`;
   el.className = "pill " + (isPeak ? "pill--peak" : "pill--offpeak");
+}
+
+function renderFleetPill(activeCount, ext) {
+  const el = document.getElementById("fleet-pill");
+  const fleetTotal = FLEET.base + (ext ? FLEET.extensionExtra : 0);
+  el.textContent = `Σε κίνηση ${activeCount} / ${fleetTotal} συρμοί`;
 }
 
 function renderExtensionBanner(parts, ext) {

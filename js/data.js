@@ -86,3 +86,10 @@ const SCHEDULE = {
   // Layover at a terminus before a train turns around and heads back.
   turnaroundMin: 2,
 };
+
+// Fleet size, as reported by the user: 18 trains serve the current network;
+// 15 more join once the Kalamaria extension opens (33 total). This is shown
+// as context next to the live "trains currently running" count — it is NOT
+// used to cap the simulation, since it's unclear whether all 33 are ever
+// simultaneously in service.
+const FLEET = { base: 18, extensionExtra: 15 };
