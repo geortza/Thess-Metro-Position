@@ -66,6 +66,28 @@ function fmtHM(dec) {
 }
 
 /* ---------------------------------------------------------------------- *
+ *  Line topology — a Y: shared trunk, then branch A (Νέα Ελβετία, live) or
+ *  branch B (Kalamaria extension, opens 27/08/2026), forking at "25ης Μαρτίου".
+ * ---------------------------------------------------------------------- */
+
+const TRUNK = STATIONS.filter((s) => s.branch === "trunk");
+const BRANCH_A = STATIONS.filter((s) => s.branch === "A");
+const BRANCH_B = STATIONS.filter((s) => s.branch === "B");
+const JUNCTION = TRUNK[TRUNK.length - 1];
+const PATH_A = [JUNCTION, ...BRANCH_A];
+const PATH_B = [JUNCTION, ...BRANCH_B];
+const WEST_TERMINUS = TRUNK[0];
+const TERMINUS_A = BRANCH_A[BRANCH_A.length - 1];
+const TERMINUS_B = BRANCH_B[BRANCH_B.length - 1];
+
+const TRUNK_H = SCHEDULE.trunkTimeMin / 60;
+const BRANCH_H = { A: SCHEDULE.branchTimeMin.A / 60, B: SCHEDULE.branchTimeMin.B / 60 };
+const TURN_H = SCHEDULE.turnaroundMin / 60;
+
+function branchArray(b) { return b === "A" ? PATH_A : PATH_B; }
+function branchTerminus(b) { return b === "A" ? TERMINUS_A : TERMINUS_B; }
+
+/* ---------------------------------------------------------------------- *
  *  Service-day resolution & headway model
  * ---------------------------------------------------------------------- */
 
@@ -112,6 +134,28 @@ function buildDepartures(openDec, closeDec, dow) {
   return list;
 }
 
+// Departures alternate branch destination once the extension is live; before
+// that every train runs the only branch that exists (A, to Νέα Ελβετία).
+function branchForDeparture(index, ext) {
+  if (!ext) return "A";
+  return index % 2 === 0 ? "A" : "B";
+}
+
+// Full round-trip timeline for one physical train, keyed off its westbound
+// (Ν. Σιδηροδρομικός Σταθμός) departure time `d`.
+function journeyFor(d, branch) {
+  const brH = BRANCH_H[branch];
+  const eastTrunkStart = d;
+  const eastTrunkEnd = d + TRUNK_H;
+  const eastBranchStart = eastTrunkEnd;
+  const eastBranchEnd = eastBranchStart + brH;
+  const westBranchStart = eastBranchEnd + TURN_H;
+  const westBranchEnd = westBranchStart + brH;
+  const westTrunkStart = westBranchEnd;
+  const westTrunkEnd = westTrunkStart + TRUNK_H;
+  return { eastTrunkStart, eastTrunkEnd, eastBranchStart, eastBranchEnd, westBranchStart, westBranchEnd, westTrunkStart, westTrunkEnd };
+}
+
 /* ---------------------------------------------------------------------- *
  *  Map geometry
  * ---------------------------------------------------------------------- */
@@ -135,14 +179,14 @@ function catmullRomPath(points) {
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 
-function positionAlong(stations, frac) {
-  const idx = Math.min(Math.max(frac, 0), 1) * (stations.length - 1);
+function positionAlong(points, frac) {
+  const idx = Math.min(Math.max(frac, 0), 1) * (points.length - 1);
   const i0 = Math.floor(idx);
-  const i1 = Math.min(i0 + 1, stations.length - 1);
+  const i1 = Math.min(i0 + 1, points.length - 1);
   const t = idx - i0;
   return {
-    x: lerp(stations[i0].x, stations[i1].x, t),
-    y: lerp(stations[i0].y, stations[i1].y, t),
+    x: lerp(points[i0].x, points[i1].x, t),
+    y: lerp(points[i0].y, points[i1].y, t),
   };
 }
 
@@ -156,48 +200,40 @@ let markerPool = [];
 let selectedStationId = null;
 
 function buildStaticMap() {
-  const svg = document.getElementById("metro-map");
-  const baseStations = STATIONS.filter((s) => !s.extension);
-  const allStations = STATIONS;
-
-  const linePath = document.getElementById("line-path-base");
-  linePath.setAttribute("d", catmullRomPath(baseStations));
-
-  const extPoints = STATIONS.slice(baseStations.length - 1); // include junction point
-  const extPath = document.getElementById("line-path-ext");
-  extPath.setAttribute("d", catmullRomPath(extPoints));
+  document.getElementById("line-path-trunk").setAttribute("d", catmullRomPath(TRUNK));
+  document.getElementById("line-path-a").setAttribute("d", catmullRomPath(PATH_A));
+  document.getElementById("line-path-ext").setAttribute("d", catmullRomPath(PATH_B));
 
   const stationsLayer = document.getElementById("stations-layer");
   stationsLayer.innerHTML = "";
-  allStations.forEach((s, idx) => {
+  STATIONS.forEach((s) => {
     const g = document.createElementNS(svgNS, "g");
-    g.setAttribute("class", "station" + (s.extension ? " station--ext" : ""));
+    g.setAttribute("class", "station" + (s.extension ? " station--ext" : "") + (s.junction ? " station--junction" : ""));
     g.setAttribute("data-id", s.id);
     g.setAttribute("tabindex", "0");
     g.setAttribute("role", "button");
-    g.setAttribute("aria-label", s.name);
+    g.setAttribute("aria-label", s.name + (s.junction ? " (διακλάδωση)" : ""));
 
     const hitArea = document.createElementNS(svgNS, "circle");
     hitArea.setAttribute("cx", s.x);
     hitArea.setAttribute("cy", s.y);
     hitArea.setAttribute("r", 20);
     hitArea.setAttribute("fill", "transparent");
-    hitArea.setAttribute("class", "station-hit");
     g.appendChild(hitArea);
 
     const dot = document.createElementNS(svgNS, "circle");
     dot.setAttribute("cx", s.x);
     dot.setAttribute("cy", s.y);
-    dot.setAttribute("r", s.terminus ? 9 : 6.5);
+    dot.setAttribute("r", s.terminus ? 9 : s.junction ? 7.5 : 6.5);
     dot.setAttribute("class", "station-dot");
     g.appendChild(dot);
 
-    if (s.terminus) {
+    if (s.terminus || s.junction) {
       const ring = document.createElementNS(svgNS, "circle");
       ring.setAttribute("cx", s.x);
       ring.setAttribute("cy", s.y);
       ring.setAttribute("r", 14);
-      ring.setAttribute("class", "station-ring");
+      ring.setAttribute("class", "station-ring" + (s.junction ? " station-ring--junction" : ""));
       g.appendChild(ring);
     }
 
@@ -242,19 +278,13 @@ function buildStaticMap() {
   }
 }
 
-function currentActiveStations(ext) {
-  return ext ? STATIONS : STATIONS.filter((s) => !s.extension);
-}
-
 function tick() {
   const parts = athensParts();
   const sw = resolveServiceWindow(parts);
   const ext = isExtensionActive(parts);
 
-  renderStatusBar(parts, sw, ext);
+  renderStatusBar(parts, sw);
   renderExtensionBanner(parts, ext);
-
-  const activeStations = currentActiveStations(ext);
   document.getElementById("metro-map").classList.toggle("map--extended", ext);
 
   if (!sw.open) {
@@ -269,22 +299,13 @@ function tick() {
     departureCache = { key: sw.dateKey, list: buildDepartures(sw.openDec, sw.closeDec, sw.dow) };
   }
 
-  const travelDec = (ext ? SCHEDULE.travelTimeMinExtended : SCHEDULE.travelTimeMinBase) / 60;
   const now = sw.nowDecAdj;
-  const currentHeadway = headwayMinutesAt(now % 24, sw.dow);
-  renderHeadwayPill(currentHeadway);
+  renderHeadwayPill(headwayMinutesAt(now % 24, sw.dow));
+  renderTrains(departureCache.list, now, ext);
 
-  const activeTrains = [];
-  for (const d of departureCache.list) {
-    if (d > now) break;
-    if (now > d + travelDec) continue;
-    const frac = (now - d) / travelDec;
-    activeTrains.push({ direction: "east", frac });
-    activeTrains.push({ direction: "west", frac });
+  if (selectedStationId) {
+    renderStationPanel(selectedStationId, { departures: departureCache.list, now, ext }, ext);
   }
-  renderTrains(activeTrains, activeStations);
-
-  if (selectedStationId) renderStationPanel(selectedStationId, { departures: departureCache.list, now, travelDec, activeStations }, ext);
 
   requestAnimationFrame(scheduleNextTick);
 }
@@ -304,23 +325,54 @@ function hideAllTrains() {
   for (const m of markerPool) m.style.opacity = "0";
 }
 
-function renderTrains(trains, activeStations) {
-  trains.forEach((tr, i) => {
-    if (i >= markerPool.length) return;
-    const marker = markerPool[i];
-    const eastFrac = tr.direction === "east" ? tr.frac : 1 - tr.frac;
-    const pos = positionAlong(activeStations, eastFrac);
-    marker.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
-    marker.style.opacity = "1";
-    marker.setAttribute("data-dir", tr.direction);
-    marker.classList.toggle("train-marker--west", tr.direction === "west");
-  });
-  for (let i = trains.length; i < markerPool.length; i++) {
-    markerPool[i].style.opacity = "0";
+// Where is a single train (departure d, branch b) right now? Returns a
+// {x,y,direction} or null if it isn't running at `now`.
+function trainStateAt(d, branch, now) {
+  const j = journeyFor(d, branch);
+  const brPoints = branchArray(branch);
+  const brH = BRANCH_H[branch];
+
+  if (now >= j.eastTrunkStart && now <= j.eastTrunkEnd) {
+    const frac = (now - j.eastTrunkStart) / TRUNK_H;
+    return { ...positionAlong(TRUNK, frac), direction: "east" };
   }
+  if (now > j.eastTrunkEnd && now <= j.eastBranchEnd) {
+    const frac = (now - j.eastBranchStart) / brH;
+    return { ...positionAlong(brPoints, frac), direction: "east" };
+  }
+  if (now > j.eastBranchEnd && now < j.westBranchStart) {
+    // Laid over at the branch terminus.
+    return { ...positionAlong(brPoints, 1), direction: "east" };
+  }
+  if (now >= j.westBranchStart && now <= j.westBranchEnd) {
+    const frac = 1 - (now - j.westBranchStart) / brH;
+    return { ...positionAlong(brPoints, frac), direction: "west" };
+  }
+  if (now > j.westBranchEnd && now <= j.westTrunkEnd) {
+    const frac = 1 - (now - j.westTrunkStart) / TRUNK_H;
+    return { ...positionAlong(TRUNK, frac), direction: "west" };
+  }
+  return null;
 }
 
-function renderStatusBar(parts, sw, ext) {
+function renderTrains(departures, now, ext) {
+  let used = 0;
+  for (let i = 0; i < departures.length; i++) {
+    const d = departures[i];
+    if (d > now) break;
+    const branch = branchForDeparture(i, ext);
+    const state = trainStateAt(d, branch, now);
+    if (!state) continue;
+    if (used >= markerPool.length) break;
+    const marker = markerPool[used++];
+    marker.style.transform = `translate(${state.x}px, ${state.y}px)`;
+    marker.style.opacity = "1";
+    marker.classList.toggle("train-marker--west", state.direction === "west");
+  }
+  for (let i = used; i < markerPool.length; i++) markerPool[i].style.opacity = "0";
+}
+
+function renderStatusBar(parts, sw) {
   const clockEl = document.getElementById("clock");
   clockEl.textContent = `${String(parts.hour).padStart(2, "0")}:${String(parts.minute).padStart(2, "0")}:${String(parts.second).padStart(2, "0")}`;
   document.getElementById("day-name").textContent = `${DAY_NAMES_EL[parts.weekdayNum]} · ${String(parts.day).padStart(2, "0")}/${String(parts.month).padStart(2, "0")}/${parts.year}`;
@@ -350,12 +402,12 @@ function renderHeadwayPill(minutes) {
 function renderExtensionBanner(parts, ext) {
   const banner = document.getElementById("extension-banner");
   if (ext) {
-    banner.textContent = "Η επέκταση προς Καλαμαριά (5 νέοι σταθμοί) είναι σε λειτουργία.";
+    banner.textContent = "Η επέκταση προς Καλαμαριά (5 νέοι σταθμοί από 25ης Μαρτίου) είναι σε λειτουργία.";
     banner.className = "extension-banner extension-banner--live";
   } else {
     const days = daysUntilExtension(parts);
     banner.textContent = days > 0
-      ? `Επέκταση Καλαμαριάς: ανοίγει σε ${days} ${days === 1 ? "ημέρα" : "ημέρες"} (27/08/2026).`
+      ? `Επέκταση Καλαμαριάς: ανοίγει σε ${days} ${days === 1 ? "ημέρα" : "ημέρες"} (27/08/2026), από τη διακλάδωση στον σταθμό 25ης Μαρτίου.`
       : "Επέκταση Καλαμαριάς: ανοίγει σήμερα.";
     banner.className = "extension-banner";
   }
@@ -375,50 +427,87 @@ function selectStation(id) {
   if (selectedStationId) tick();
 }
 
-function nextArrivals(stationIndex, n, ctx) {
-  const { departures, now, travelDec, activeStations } = ctx;
-  const N = activeStations.length;
-  const east = [], west = [];
-  for (const d of departures) {
-    const eastArrival = d + (stationIndex / (N - 1)) * travelDec;
-    const westArrival = d + ((N - 1 - stationIndex) / (N - 1)) * travelDec;
-    if (eastArrival >= now) east.push(eastArrival);
-    if (westArrival >= now) west.push(westArrival);
+// Next `n` arrival times at `station`, split by direction. Eastbound trunk
+// stations can be served by trains ultimately bound for either branch
+// terminus, so eastbound is grouped by final destination.
+function nextArrivals(station, n, ctx) {
+  const { departures, now, ext } = ctx;
+  const west = [];
+  const eastByBranch = { A: [], B: [] };
+
+  const trunkIdx = station.branch === "trunk" ? TRUNK.findIndex((s) => s.id === station.id) : -1;
+  const trunkLen = TRUNK.length - 1;
+
+  for (let i = 0; i < departures.length; i++) {
+    const d = departures[i];
+    const branch = branchForDeparture(i, ext);
+    const brH = BRANCH_H[branch];
+
+    if (station.branch === "trunk") {
+      const eastArr = d + (trunkIdx / trunkLen) * TRUNK_H;
+      const j = journeyFor(d, branch);
+      const westArr = j.westBranchEnd + ((trunkLen - trunkIdx) / trunkLen) * TRUNK_H;
+      if (eastArr >= now) eastByBranch[branch].push(eastArr);
+      if (westArr >= now) west.push(westArr);
+    } else if (station.branch === branch) {
+      const pts = branchArray(branch);
+      const localIdx = pts.findIndex((s) => s.id === station.id);
+      const branchLen = pts.length - 1;
+      const eastArr = d + TRUNK_H + (localIdx / branchLen) * brH;
+      const j = journeyFor(d, branch);
+      const westArr = j.westBranchStart + ((branchLen - localIdx) / branchLen) * brH;
+      if (eastArr >= now) eastByBranch[branch].push(eastArr);
+      if (westArr >= now) west.push(westArr);
+    }
   }
-  east.sort((a, b) => a - b);
+
   west.sort((a, b) => a - b);
-  return { east: east.slice(0, n), west: west.slice(0, n) };
+  eastByBranch.A.sort((a, b) => a - b);
+  eastByBranch.B.sort((a, b) => a - b);
+
+  const eastGroups = [];
+  if (eastByBranch.A.length) eastGroups.push({ label: TERMINUS_A.short, times: eastByBranch.A.slice(0, n) });
+  if (ext && eastByBranch.B.length) eastGroups.push({ label: TERMINUS_B.short, times: eastByBranch.B.slice(0, n) });
+
+  return { west: west.slice(0, n), eastGroups };
 }
 
 function renderStationPanel(id, ctx, ext) {
   const station = STATIONS.find((s) => s.id === id);
-  const panel = document.getElementById("station-panel");
-  const activeStations = ctx ? ctx.activeStations : currentActiveStations(ext);
-  const idx = activeStations.findIndex((s) => s.id === id);
-
-  document.getElementById("station-panel-title").textContent = station.name;
-
-  const eastTerm = activeStations[activeStations.length - 1];
-  const westTerm = activeStations[0];
+  document.getElementById("station-panel-title").textContent = station.name + (station.junction ? " · διακλάδωση" : "");
 
   const listsEl = document.getElementById("station-panel-lists");
-  if (!ctx || idx === -1) {
+
+  if (!ctx) {
     listsEl.innerHTML = `<p class="muted">Το δίκτυο είναι κλειστό αυτή τη στιγμή. Πρώτο δρομολόγιο στις ${fmtHM(OPEN_DEC)}.</p>`;
     return;
   }
 
-  const { east, west } = nextArrivals(idx, 3, ctx);
+  if (station.branch === "B" && !ext) {
+    const daysNote = daysUntilExtension(athensParts());
+    listsEl.innerHTML = `<p class="muted">Ο σταθμός ανήκει στην επέκταση Καλαμαριάς, που ανοίγει σε ${Math.max(daysNote, 0)} ${daysNote === 1 ? "ημέρα" : "ημέρες"} (27/08/2026).</p>`;
+    return;
+  }
+
   const fmtList = (arr, now) => arr.length
     ? arr.map((t) => `<li><span class="eta-time">${fmtHM(t % 24)}</span><span class="eta-rel">σε ${Math.max(0, Math.round((t - now) * 60))}′</span></li>`).join("")
     : `<li class="muted">Δεν υπάρχουν άλλα δρομολόγια σήμερα</li>`;
 
+  const { west, eastGroups } = nextArrivals(station, 3, ctx);
+
+  const eastBlocksHtml = eastGroups.length
+    ? eastGroups.map((g) => `
+        <div class="direction-block">
+          <h4>→ προς ${g.label}</h4>
+          <ul>${fmtList(g.times, ctx.now)}</ul>
+        </div>
+      `).join("")
+    : `<div class="direction-block"><h4>→ ανατολικά</h4><ul><li class="muted">Δεν υπάρχουν άλλα δρομολόγια σήμερα</li></ul></div>`;
+
   listsEl.innerHTML = `
+    ${eastBlocksHtml}
     <div class="direction-block">
-      <h4>→ προς ${eastTerm.short}</h4>
-      <ul>${fmtList(east, ctx.now)}</ul>
-    </div>
-    <div class="direction-block">
-      <h4>→ προς ${westTerm.short}</h4>
+      <h4>→ προς ${WEST_TERMINUS.short}</h4>
       <ul>${fmtList(west, ctx.now)}</ul>
     </div>
   `;

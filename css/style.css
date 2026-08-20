@@ -189,6 +189,16 @@ html, body {
   stroke-width: 2;
 }
 
+.station-ring--junction {
+  stroke: rgba(255, 182, 72, 0.5);
+  stroke-dasharray: 2 3;
+}
+
+.station--junction .station-dot {
+  fill: var(--bg-alt);
+  stroke: var(--amber);
+}
+
 .station { cursor: pointer; outline: none; }
 .station:hover .station-dot, .station--selected .station-dot { r: 9; stroke-width: 4; }
 .station--selected .station-dot { fill: var(--teal); }
