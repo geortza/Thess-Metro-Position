@@ -337,3 +337,7 @@ html, body {
   .topbar { padding: 14px 16px; }
   .layout, .extension-banner, .footer { padding-left: 16px; padding-right: 16px; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .train-marker, .line-path--ext, .station-dot { transition: none !important; }
+}
