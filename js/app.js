@@ -112,96 +112,60 @@ function resolveServiceWindow(parts) {
   return { open: true, dow, dateKey: `${parts.year}-${parts.month}-${parts.day}`, openDec: OPEN_DEC, closeDec: close, nowDecAdj: nowDec };
 }
 
-function headwayMinutesAt(hourDec, dow, ext) {
-  const isWeekday = dow >= 1 && dow <= 5;
-  if (isWeekday) {
-    for (const [s, e] of SCHEDULE.peakWindowsWeekday) {
-      const sh = decHour(s), eh = decHour(e);
-      if (hourDec >= sh && hourDec < eh) {
-        return ext ? SCHEDULE.peakHeadwayMinExtended : SCHEDULE.peakHeadwayMin;
-      }
-    }
-  }
-  return SCHEDULE.offPeakHeadwayMin;
+// Which day-type headway profile applies: Κυριακή has its own, Σάββατο has
+// its own, Δευτέρα-Παρασκευή share one (closing time still differs Fri).
+function headwayProfileFor(dow) {
+  if (dow === 0) return SCHEDULE.headwayBands.sunday;
+  if (dow === 6) return SCHEDULE.headwayBands.saturday;
+  return SCHEDULE.headwayBands.weekday;
 }
 
-// Trains inserted from the Νέα Ελβετία depot ahead of a peak window: each
-// entry is { leaveNE, arriveNSS }. They travel branch A + trunk west to
+// Official THEMA timetable: trunk headway (minutes) for the given moment,
+// plus whether it's the early (05:15-07:30) or main (07:30-close) band.
+function headwayMinutesAt(hourDec, dow) {
+  const profile = headwayProfileFor(dow);
+  const early = hourDec < SCHEDULE.bandBoundaryHour;
+  return { minutes: early ? profile.early : profile.main, early };
+}
+
+// Trains inserted from the Νέα Ελβετία depot in the minutes before the
+// 07:30 step-up from the early to the main timetable band: each entry is
+// { leaveNE, arriveNSS }. They travel branch A + trunk west to
 // Ν. Σιδηροδρομικός Σταθμός and from `arriveNSS` on are indistinguishable
 // from a regular departure — buildDepartures merges that arrival time
 // straight into the main list, so all downstream logic (journeyFor, branch
 // assignment, station arrivals) treats them identically from then on.
-function buildRampInsertions(openDec, closeDec, dow, ext) {
+function buildRampInsertions(openDec, closeDec, dow) {
   const inserts = [];
-  if (!(dow >= 1 && dow <= 5)) return inserts; // peak windows are weekday-only
+  const profile = headwayProfileFor(dow);
   const rampH = SCHEDULE.rampMinutes / 60;
-  for (const [s, e] of SCHEDULE.peakWindowsWeekday) {
-    const peakStart = decHour(s);
-    const targetHeadway = ext ? SCHEDULE.peakHeadwayMinExtended : SCHEDULE.peakHeadwayMin;
-    const rampStart = peakStart - rampH;
-    let t = Math.max(rampStart, openDec);
-    let guard = 0;
-    while (t < peakStart && t <= closeDec && guard < 200) {
-      const frac = Math.min(Math.max((t - rampStart) / rampH, 0), 1);
-      const headway = lerp(SCHEDULE.offPeakHeadwayMin, targetHeadway, frac);
-      inserts.push({ leaveNE: t, arriveNSS: t + NE_TO_NSS_H });
-      t += headway / 60;
-      guard++;
-    }
+  const boundary = SCHEDULE.bandBoundaryHour;
+  const rampStart = boundary - rampH;
+  let t = Math.max(rampStart, openDec);
+  let guard = 0;
+  while (t < boundary && t <= closeDec && guard < 200) {
+    const frac = Math.min(Math.max((t - rampStart) / rampH, 0), 1);
+    const headway = lerp(profile.early, profile.main, frac);
+    inserts.push({ leaveNE: t, arriveNSS: t + NE_TO_NSS_H });
+    t += headway / 60;
+    guard++;
   }
   return inserts;
 }
 
-// Mirror of the ramp-up: after each peak window ends, branch-A trains
-// arriving at Νέα Ελβετία are progressively pulled into the depot instead
-// of turning around, thinning the westbound flow back down to the off-peak
-// headway over the same ramp window rather than letting every peak-era
-// train complete its full ~40' round trip regardless. Only Νέα Ελβετία
-// arrivals are affected — no equivalent info for the Kalamaria branch.
-function buildRampRemovals(list, dow, ext) {
-  const removed = new Set();
-  if (!(dow >= 1 && dow <= 5)) return removed;
-  const rampH = SCHEDULE.rampMinutes / 60;
-  const arrivalOffset = TRUNK_H + BRANCH_H.A; // Ν.Σ.Σ. departure -> Νέα Ελβετία arrival
-  const peakHeadway = ext ? SCHEDULE.peakHeadwayMinExtended : SCHEDULE.peakHeadwayMin;
-  for (const [, e] of SCHEDULE.peakWindowsWeekday) {
-    const peakEnd = decHour(e);
-    const rampEnd = peakEnd + rampH;
-    const candidates = [];
-    list.forEach((d, i) => {
-      if (branchForDeparture(i, ext) !== "A") return;
-      const arrival = d + arrivalOffset;
-      if (arrival >= peakEnd && arrival < rampEnd) candidates.push({ d, arrival });
-    });
-    candidates.sort((a, b) => a.arrival - b.arrival);
-    let nextAllowed = -Infinity;
-    for (const c of candidates) {
-      if (c.arrival >= nextAllowed) {
-        const frac = Math.min(Math.max((c.arrival - peakEnd) / rampH, 0), 1);
-        const targetHeadway = lerp(peakHeadway, SCHEDULE.offPeakHeadwayMin, frac);
-        nextAllowed = c.arrival + targetHeadway / 60;
-      } else {
-        removed.add(c.d);
-      }
-    }
-  }
-  return removed;
-}
-
-function buildDepartures(openDec, closeDec, dow, ext) {
+function buildDepartures(openDec, closeDec, dow) {
   const list = [];
   let t = openDec;
   let guard = 0;
   while (t <= closeDec && guard < 4000) {
     list.push(t);
-    t += headwayMinutesAt(t % 24, dow, ext) / 60;
+    t += headwayMinutesAt(t % 24, dow).minutes / 60;
     guard++;
   }
-  const ramp = buildRampInsertions(openDec, closeDec, dow, ext);
+  const ramp = buildRampInsertions(openDec, closeDec, dow);
   for (const r of ramp) list.push(r.arriveNSS);
   list.sort((a, b) => a - b);
-  const removed = buildRampRemovals(list, dow, ext);
-  return { list, ramp, removed };
+  return { list, ramp };
 }
 
 // Confirmed real-world split once the extension is live: of every 3 trains
@@ -351,7 +315,7 @@ function updateExtensionLineStyle(ext) {
  *  Ticking / rendering
  * ---------------------------------------------------------------------- */
 
-let departureCache = { key: null, ext: null, list: [], ramp: [], removed: new Set() };
+let departureCache = { key: null, list: [], ramp: [] };
 let lastExt = null;
 
 function tick() {
@@ -372,18 +336,18 @@ function tick() {
     return;
   }
 
-  if (departureCache.key !== sw.dateKey || departureCache.ext !== ext) {
-    const built = buildDepartures(sw.openDec, sw.closeDec, sw.dow, ext);
-    departureCache = { key: sw.dateKey, ext, list: built.list, ramp: built.ramp, removed: built.removed };
+  if (departureCache.key !== sw.dateKey) {
+    const built = buildDepartures(sw.openDec, sw.closeDec, sw.dow);
+    departureCache = { key: sw.dateKey, list: built.list, ramp: built.ramp };
   }
 
   const now = sw.nowDecAdj;
-  renderHeadwayPill(headwayMinutesAt(now % 24, sw.dow, ext));
-  const activeCount = renderTrains(departureCache.list, departureCache.ramp, departureCache.removed, now, ext);
+  renderHeadwayPill(headwayMinutesAt(now % 24, sw.dow));
+  const activeCount = renderTrains(departureCache.list, departureCache.ramp, now, ext);
   renderFleetPill(activeCount, ext);
 
   if (selectedStationId) {
-    renderStationPanel(selectedStationId, { departures: departureCache.list, removed: departureCache.removed, now, ext }, ext);
+    renderStationPanel(selectedStationId, { departures: departureCache.list, now, ext }, ext);
   }
 
   requestAnimationFrame(scheduleNextTick);
@@ -405,14 +369,11 @@ function hideAllTrains() {
 }
 
 // Where is a single train (departure d, branch b) right now? Returns
-// {lat,lng,direction} or null if it isn't running at `now`. `removed` is the
-// set of departures that get pulled into the Νέα Ελβετία depot instead of
-// turning around (post-peak thinning) — they vanish once they arrive there.
-function trainStateAt(d, branch, now, removed) {
+// {lat,lng,direction} or null if it isn't running at `now`.
+function trainStateAt(d, branch, now) {
   const j = journeyFor(d, branch);
   const brPoints = branchArray(branch);
   const brH = BRANCH_H[branch];
-  const isRemoved = removed && removed.has(d);
 
   if (now >= j.eastTrunkStart && now <= j.eastTrunkEnd) {
     const frac = (now - j.eastTrunkStart) / TRUNK_H;
@@ -422,7 +383,6 @@ function trainStateAt(d, branch, now, removed) {
     const frac = (now - j.eastBranchStart) / brH;
     return { ...positionAlong(brPoints, frac), direction: "east" };
   }
-  if (isRemoved) return null; // pulled into the depot at Νέα Ελβετία, doesn't return
   if (now > j.eastBranchEnd && now < j.westBranchStart) {
     // Laid over at the branch terminus.
     return { ...positionAlong(brPoints, 1), direction: "east" };
@@ -452,7 +412,7 @@ function rampTrainStateAt(insert, now) {
   return positionAlong(TRUNK, frac);
 }
 
-function renderTrains(departures, ramp, removed, now, ext) {
+function renderTrains(departures, ramp, now, ext) {
   // The headway/branch-split math can imply more trains "in the system" than
   // the real fleet has (tight peak headways leave little spare margin) — cap
   // rendering at the known fleet size rather than show more trains than exist.
@@ -474,7 +434,7 @@ function renderTrains(departures, ramp, removed, now, ext) {
     const d = departures[i];
     if (d > now) break;
     const branch = branchForDeparture(i, ext);
-    const state = trainStateAt(d, branch, now, removed);
+    const state = trainStateAt(d, branch, now);
     if (!state) continue;
     if (used >= fleetCap) break;
     const marker = markerPool[used++];
@@ -502,16 +462,25 @@ function renderStatusBar(parts, sw) {
   }
 }
 
-function renderHeadwayPill(minutes) {
+// Formats a decimal-minute headway the way THEMA's own timetable does
+// (e.g. 2.9167 -> "2:55′", 5 -> "5′").
+function fmtMinSec(decMin) {
+  const totalSec = Math.round(decMin * 60);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return s === 0 ? `${m}′` : `${m}:${String(s).padStart(2, "0")}′`;
+}
+
+function renderHeadwayPill(info) {
   const el = document.getElementById("headway-pill");
-  if (minutes == null) {
+  if (info == null) {
     el.textContent = "—";
     el.className = "pill pill--muted";
     return;
   }
-  const isPeak = minutes === SCHEDULE.peakHeadwayMin || minutes === SCHEDULE.peakHeadwayMinExtended;
-  el.textContent = `${isPeak ? "Ώρα αιχμής" : "Κανονικό ωράριο"} · ανά ${minutes}′`;
-  el.className = "pill " + (isPeak ? "pill--peak" : "pill--offpeak");
+  const { minutes, early } = info;
+  el.textContent = `${early ? "Πρωινό πρόγραμμα" : "Κανονικό πρόγραμμα"} · ανά ${fmtMinSec(minutes)}`;
+  el.className = "pill " + (early ? "pill--peak" : "pill--offpeak");
 }
 
 function renderFleetPill(activeCount, ext) {
@@ -553,7 +522,7 @@ function selectStation(id) {
 // stations can be served by trains ultimately bound for either branch
 // terminus, so eastbound is grouped by final destination.
 function nextArrivals(station, n, ctx) {
-  const { departures, removed, now, ext } = ctx;
+  const { departures, now, ext } = ctx;
   const west = [];
   const eastByBranch = { A: [], B: [] };
 
@@ -564,14 +533,13 @@ function nextArrivals(station, n, ctx) {
     const d = departures[i];
     const branch = branchForDeparture(i, ext);
     const brH = BRANCH_H[branch];
-    const isRemoved = removed && removed.has(d);
 
     if (station.branch === "trunk") {
       const eastArr = d + (trunkIdx / trunkLen) * TRUNK_H;
       const j = journeyFor(d, branch);
       const westArr = j.westBranchEnd + ((trunkLen - trunkIdx) / trunkLen) * TRUNK_H;
       if (eastArr >= now) eastByBranch[branch].push(eastArr);
-      if (!isRemoved && westArr >= now) west.push(westArr);
+      if (westArr >= now) west.push(westArr);
     } else if (station.branch === branch) {
       const pts = branchArray(branch);
       const localIdx = pts.findIndex((s) => s.id === station.id);
@@ -580,7 +548,7 @@ function nextArrivals(station, n, ctx) {
       const j = journeyFor(d, branch);
       const westArr = j.westBranchStart + ((branchLen - localIdx) / branchLen) * brH;
       if (eastArr >= now) eastByBranch[branch].push(eastArr);
-      if (!isRemoved && westArr >= now) west.push(westArr);
+      if (westArr >= now) west.push(westArr);
     }
   }
 

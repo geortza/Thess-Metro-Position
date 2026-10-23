@@ -53,37 +53,44 @@ const SCHEDULE = {
   // First train leaves the western terminus at this time, every day of the week.
   openTime: { hour: 5, minute: 15 },
   // Last service of the day closes the network at this time (24h clock,
-  // values >= 24:00 mean "the following calendar morning").
+  // values >= 24:00 mean "the following calendar morning"). Per THEMA's
+  // published timetable.
   closeTimeByWeekday: {
     // 0 = Sunday ... 6 = Saturday
     0: { hour: 24, minute: 30 }, // Sun -> 00:30 Mon
-    1: { hour: 23, minute: 0 },
-    2: { hour: 23, minute: 0 },
-    3: { hour: 23, minute: 0 },
-    4: { hour: 23, minute: 0 },
-    5: { hour: 26, minute: 0 }, // Fri -> 02:00 Sat
-    6: { hour: 26, minute: 0 }, // Sat -> 02:00 Sun
+    1: { hour: 24, minute: 30 }, // Mon -> 00:30 Tue
+    2: { hour: 24, minute: 30 },
+    3: { hour: 24, minute: 30 },
+    4: { hour: 24, minute: 30 }, // Thu -> 00:30 Fri
+    5: { hour: 26, minute: 0 },  // Fri -> 02:00 Sat
+    6: { hour: 26, minute: 0 },  // Sat -> 02:00 Sun
   },
-  // Headway model, as described by the user: every 3' at peak, every 5' otherwise.
-  // This is the frequency on the shared trunk. Per the operator, peak headway
-  // tightens to 1.5' once the Kalamaria extension is live (offPeakHeadwayMin
-  // is unaffected). Departures then split 2:1 in favour of branch B
-  // (Kalamaria) over branch A (Νέα Ελβετία) — a confirmed real-world ratio,
-  // not a 50/50 guess. See branchForDeparture() in app.js.
-  peakHeadwayMin: 3,
-  peakHeadwayMinExtended: 1.5,
-  offPeakHeadwayMin: 5,
+  // Official THEMA timetable (operator-published): trunk headway (Ν.Σ.Σ. <->
+  // 25ης Μαρτίου), in minutes, by day type and time band. Every day has two
+  // bands: "early" (05:15-07:30) and "main" (07:30 until close).
+  //
+  // The branch-specific headways THEMA publishes alongside these (Νέα
+  // Ελβετία / Μίκρα) are NOT stored separately — they fall straight out of
+  // the existing 2:1 branch-split pattern (branchForDeparture) applied to
+  // the trunk headway below, and match THEMA's published numbers exactly
+  // (e.g. main band weekday: trunk 2:55 -> branch A every 3x = 8:45, branch
+  // B averaging 1.5x = 4:23 — exactly as published).
+  //
+  // NOTE: "Αργία" (public holidays) officially follow the Sunday timetable,
+  // but this model has no holiday calendar, so only Κυριακή (dow 0) itself
+  // gets the Sunday numbers — a public holiday falling on a weekday is not
+  // currently detected and uses the weekday numbers instead.
+  bandBoundaryHour: 7.5, // 07:30, same every day
+  headwayBands: {
+    weekday: { early: 5, main: 2 + 55 / 60 },   // Mon-Fri (closing time still differs Fri vs Mon-Thu)
+    saturday: { early: 10, main: 2 + 55 / 60 },
+    sunday: { early: 10, main: 3 + 25 / 60 },
+  },
   // Per the operator: extra trains join service from the depot near Νέα
-  // Ελβετία ahead of each peak window, so the interval tightens gradually
-  // rather than snapping instantly. Confirmed range was 10-15'; using the
-  // midpoint. See buildRampInsertions() in app.js.
+  // Ελβετία in the minutes before the 07:30 step-up, so the interval
+  // tightens gradually rather than snapping instantly. Confirmed range was
+  // 10-15'; using the midpoint. See buildRampInsertions() in app.js.
   rampMinutes: 12,
-  // Peak windows apply on weekdays only (Mon-Fri). Assumption, tune freely.
-  peakWindowsWeekday: [
-    [{ hour: 7, minute: 0 }, { hour: 9, minute: 30 }],
-    [{ hour: 14, minute: 0 }, { hour: 16, minute: 30 }],
-    [{ hour: 19, minute: 0 }, { hour: 21, minute: 0 }],
-  ],
   // Approximate running times (assumption, tune freely). Trunk = western
   // terminus -> 25ης Μαρτίου fork. Branch A/B = fork -> each branch terminus.
   // Trunk + branch A totals ~19' (matches the current 13-station line).
@@ -95,8 +102,7 @@ const SCHEDULE = {
 };
 
 // Fleet size, as reported by the user: 18 trains serve the current network;
-// 15 more join once the Kalamaria extension opens (33 total). This is shown
-// as context next to the live "trains currently running" count — it is NOT
-// used to cap the simulation, since it's unclear whether all 33 are ever
-// simultaneously in service.
+// 15 more join once the Kalamaria extension opens (33 total). Also used to
+// cap the rendered/counted trains, since the headway math can otherwise
+// imply more trains in the system than the real fleet has.
 const FLEET = { base: 18, extensionExtra: 15 };
