@@ -263,9 +263,17 @@ const TOOLTIP_OFFSET = {
 function buildMap() {
   map = L.map("metro-map", { zoomControl: true, scrollWheelZoom: true, minZoom: 11, maxZoom: 18 });
 
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: "abcd",
+  // CARTO's dark basemap now requires a (free) API key and stamps a watermark
+  // on keyless requests, so use Esri's World Dark Gray Canvas instead — no
+  // key needed. It ships as two stacked raster layers: solid base colors,
+  // then roads/labels on top.
+  L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+    attribution: 'Basemap &copy; <a href="https://www.esri.com">Esri</a> &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS',
+    maxNativeZoom: 16,
+    maxZoom: 19,
+  }).addTo(map);
+  L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {
+    maxNativeZoom: 16,
     maxZoom: 19,
   }).addTo(map);
 
