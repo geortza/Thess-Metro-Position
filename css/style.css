@@ -12,6 +12,7 @@
   --red: #d13d3d;
   --train-a: #e0197e;
   --train-b: #4f9a0b;
+  --train-west: #7c4dff;
   --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, monospace;
   --shadow-float: 0 8px 24px rgba(16, 24, 40, 0.12), 0 1px 2px rgba(16, 24, 40, 0.08);
@@ -283,12 +284,16 @@ html, body {
 .train-svg { overflow: visible; }
 
 .train-hull {
-  fill: var(--train-a);
+  fill: var(--train-west);
   stroke: #ffffff;
   stroke-width: 1.4;
   filter: drop-shadow(0 1.5px 2px rgba(16, 24, 40, 0.35));
 }
-.train-marker--branch-b .train-hull { fill: var(--train-b); }
+/* Colored by direction + destination, not by branch: every westbound train
+   (-> Ν.Σ.Σ.) shares --train-west regardless of which branch it came from;
+   eastbound trains are colored by which branch terminus they're headed to. */
+.train-marker--dir-east-a .train-hull { fill: var(--train-a); }
+.train-marker--dir-east-b .train-hull { fill: var(--train-b); }
 
 .train-window { fill: rgba(255, 255, 255, 0.82); }
 .train-light { fill: #fff6d6; filter: drop-shadow(0 0 2px rgba(255, 246, 214, 0.9)); }
@@ -321,6 +326,7 @@ html, body {
 .legend-swatch--ext { background: repeating-linear-gradient(90deg, var(--amber) 0 4px, transparent 4px 9px); }
 
 .legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.legend-dot--west { background: var(--train-west); }
 .legend-dot--a { background: var(--train-a); }
 .legend-dot--b { background: var(--train-b); }
 

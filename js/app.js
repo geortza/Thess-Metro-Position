@@ -471,7 +471,7 @@ function renderTrains(departures, ramp, now, ext) {
     marker.setOpacity(1);
     const el = marker.getElement();
     if (el) {
-      el.classList.toggle("train-marker--branch-b", false);
+      setTrainDirectionClass(el, "west"); // pre-service leg: westbound toward Ν.Σ.Σ.
       setTrainRotation(el, pos.dirDeg);
     }
   }
@@ -488,7 +488,12 @@ function renderTrains(departures, ramp, now, ext) {
     marker.setOpacity(1);
     const el = marker.getElement();
     if (el) {
-      el.classList.toggle("train-marker--branch-b", branch === "B");
+      // Color by direction + destination, not by branch alone: every
+      // westbound train (heading to Ν.Σ.Σ., whether it started from Νέα
+      // Ελβετία or Μίκρα) shares one color; eastbound trains are colored by
+      // which branch terminus they're headed to.
+      const kind = state.direction === "west" ? "west" : (branch === "B" ? "east-b" : "east-a");
+      setTrainDirectionClass(el, kind);
       setTrainRotation(el, state.dirDeg);
     }
   }
@@ -502,6 +507,14 @@ function renderTrains(departures, ramp, now, ext) {
 function setTrainRotation(markerEl, dirDeg) {
   const body = markerEl.querySelector(".train-body");
   if (body) body.style.transform = `rotate(${(dirDeg - 90).toFixed(1)}deg)`;
+}
+
+// kind: "west" (-> Ν.Σ.Σ., shared by both branches), "east-a" (-> Νέα
+// Ελβετία), or "east-b" (-> Μίκρα / Καλαμαριά).
+function setTrainDirectionClass(markerEl, kind) {
+  markerEl.classList.toggle("train-marker--dir-west", kind === "west");
+  markerEl.classList.toggle("train-marker--dir-east-a", kind === "east-a");
+  markerEl.classList.toggle("train-marker--dir-east-b", kind === "east-b");
 }
 
 function renderStatusBar(parts, sw) {
