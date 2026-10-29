@@ -349,6 +349,67 @@ html, body {
 .footer a { color: var(--teal); }
 
 /* ---------------------------------------------------------------------- */
+/* Disclaimer overlay */
+
+.disclaimer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 6, 12, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.disclaimer-overlay[hidden] { display: none; }
+
+.disclaimer-card {
+  max-width: 440px;
+  width: 100%;
+  background: var(--bg-alt);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  padding: 26px 26px 22px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+
+.disclaimer-card h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.disclaimer-card p {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-dim);
+}
+
+.disclaimer-card p strong { color: var(--ink); }
+
+.disclaimer-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px 18px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--teal), var(--blue));
+  color: #05100e;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.disclaimer-btn:hover { filter: brightness(1.08); }
+.disclaimer-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------------- */
 /* Responsive */
 
 @media (max-width: 900px) {

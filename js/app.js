@@ -605,10 +605,43 @@ function renderStationPanel(id, ctx, ext) {
 }
 
 /* ---------------------------------------------------------------------- *
+ *  Disclaimer overlay — shown once per browser until dismissed.
+ * ---------------------------------------------------------------------- */
+
+const DISCLAIMER_KEY = "thess-metro-disclaimer-ack";
+
+function setupDisclaimer() {
+  const overlay = document.getElementById("disclaimer-overlay");
+  const okBtn = document.getElementById("disclaimer-ok");
+
+  let alreadyAcked = false;
+  try {
+    alreadyAcked = localStorage.getItem(DISCLAIMER_KEY) === "1";
+  } catch (e) {
+    // Storage unavailable (private mode, blocked, etc.) — just show it every time.
+  }
+
+  if (alreadyAcked) {
+    overlay.hidden = true;
+    return;
+  }
+
+  okBtn.addEventListener("click", () => {
+    overlay.hidden = true;
+    try {
+      localStorage.setItem(DISCLAIMER_KEY, "1");
+    } catch (e) {
+      // Nothing to do — it'll just show again next visit.
+    }
+  });
+}
+
+/* ---------------------------------------------------------------------- *
  *  Boot
  * ---------------------------------------------------------------------- */
 
 document.addEventListener("DOMContentLoaded", () => {
+  setupDisclaimer();
   buildMap();
   document.getElementById("close-panel").addEventListener("click", () => selectStation(selectedStationId));
   requestAnimationFrame(scheduleNextTick);
