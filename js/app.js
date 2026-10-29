@@ -582,8 +582,7 @@ function selectStation(id) {
     const el = marker.getElement();
     if (el) el.classList.toggle("station-marker--selected", sid === selectedStationId);
   });
-  document.getElementById("station-panel-empty").hidden = !!selectedStationId;
-  document.getElementById("station-panel-content").hidden = !selectedStationId;
+  document.getElementById("station-panel").hidden = !selectedStationId;
   if (selectedStationId) tick();
 }
 

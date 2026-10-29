@@ -348,19 +348,6 @@ html, body {
   overflow-y: auto;
 }
 
-.station-panel-empty:not([hidden]) {
-  display: flex;
-  align-items: center;
-  height: 100%;
-}
-
-.station-panel-empty p {
-  margin: 0;
-  color: var(--ink-faint);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
 .station-panel-header {
   display: flex;
   align-items: center;

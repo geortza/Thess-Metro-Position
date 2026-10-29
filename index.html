@@ -68,17 +68,12 @@
       <div class="legend-item"><span class="legend-dot legend-dot--b"></span> Προς Μίκρα (Καλαμαριά)</div>
     </div>
 
-    <aside id="station-panel" class="float float--panel">
-      <div id="station-panel-empty" class="station-panel-empty">
-        <p>Πατήστε σε έναν σταθμό στον χάρτη για να δεις τις επόμενες αφίξεις και προς τις δύο κατευθύνσεις.</p>
+    <aside id="station-panel" class="float float--panel" hidden>
+      <div class="station-panel-header">
+        <h3 id="station-panel-title">—</h3>
+        <button id="close-panel" class="icon-btn" aria-label="Κλείσιμο">✕</button>
       </div>
-      <div id="station-panel-content" class="station-panel-content" hidden>
-        <div class="station-panel-header">
-          <h3 id="station-panel-title">—</h3>
-          <button id="close-panel" class="icon-btn" aria-label="Κλείσιμο">✕</button>
-        </div>
-        <div id="station-panel-lists" class="station-panel-lists"></div>
-      </div>
+      <div id="station-panel-lists" class="station-panel-lists"></div>
     </aside>
   </main>
 
