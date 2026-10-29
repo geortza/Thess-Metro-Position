@@ -348,6 +348,14 @@ html, body {
 
 .footer a { color: var(--teal); }
 
+.footer-legal {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
 /* ---------------------------------------------------------------------- */
 /* Disclaimer overlay */
 
