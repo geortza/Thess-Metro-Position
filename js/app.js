@@ -237,6 +237,7 @@ let map;
 const stationMarkers = {};
 let markerPool = [];
 let selectedStationId = null;
+let panelOpenerEl = null;
 const linePolylines = {};
 
 const TOOLTIP_OFFSET = {
@@ -290,12 +291,20 @@ function buildMap() {
     });
     const marker = L.marker([s.lat, s.lng], { icon, keyboard: true, alt: s.name, riseOnHover: true });
     marker.addTo(map);
+    const el = marker.getElement();
+    if (el) {
+      // L.divIcon's element is a plain <div>, so Leaflet's `alt` option (meant
+      // for <img>-based icons) has no effect here — set an explicit
+      // accessible name instead.
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", s.name + (s.junction ? " (διακλάδωση)" : ""));
+    }
     const dir = s.labelPos || "right";
     marker.bindTooltip(s.short, {
       permanent: false, direction: dir, className: "station-tooltip", offset: TOOLTIP_OFFSET[dir] || [12, 0],
     });
-    marker.on("click", () => selectStation(s.id));
-    marker.on("keypress", (e) => { if (e.originalEvent.key === "Enter") selectStation(s.id); });
+    marker.on("click", () => selectStation(s.id, el));
+    marker.on("keypress", (e) => { if (e.originalEvent.key === "Enter") selectStation(s.id, el); });
     stationMarkers[s.id] = marker;
   });
 
@@ -360,6 +369,16 @@ function updateExtensionLineStyle(ext) {
 
 let departureCache = { key: null, list: [], ramp: [] };
 let lastExt = null;
+let lastOpenState = null;
+
+// Posts a short message to the hidden aria-live region — used only for
+// meaningful, infrequent state changes (network open/closed, extension going
+// live), never for the per-second clock/ETA updates, which would otherwise
+// spam screen reader users.
+function announce(msg) {
+  const el = document.getElementById("a11y-announcer");
+  if (el) el.textContent = msg;
+}
 
 function tick() {
   const parts = athensParts();
@@ -368,7 +387,15 @@ function tick() {
 
   renderStatusBar(parts, sw);
   renderExtensionBanner(parts, ext);
-  if (ext !== lastExt) { updateExtensionLineStyle(ext); lastExt = ext; }
+  if (ext !== lastExt) {
+    updateExtensionLineStyle(ext);
+    if (lastExt !== null) announce("Η επέκταση προς Καλαμαριά τέθηκε σε λειτουργία.");
+    lastExt = ext;
+  }
+  if (sw.open !== lastOpenState) {
+    if (lastOpenState !== null) announce(sw.open ? "Το δίκτυο άνοιξε." : "Το δίκτυο έκλεισε.");
+    lastOpenState = sw.open;
+  }
 
   if (!sw.open) {
     hideAllTrains();
@@ -576,14 +603,28 @@ function renderExtensionBanner(parts, ext) {
  *  Station detail panel
  * ---------------------------------------------------------------------- */
 
-function selectStation(id) {
+// `openerEl` is whatever triggered the selection (a station marker or a
+// quick-list button) — focus returns there when the panel closes, so
+// keyboard/screen-reader users land back where they started instead of at
+// the top of the page.
+function selectStation(id, openerEl) {
   selectedStationId = selectedStationId === id ? null : id;
   Object.entries(stationMarkers).forEach(([sid, marker]) => {
     const el = marker.getElement();
     if (el) el.classList.toggle("station-marker--selected", sid === selectedStationId);
   });
-  document.getElementById("station-panel").hidden = !selectedStationId;
-  if (selectedStationId) tick();
+  const panel = document.getElementById("station-panel");
+  panel.hidden = !selectedStationId;
+  if (selectedStationId) {
+    panelOpenerEl = openerEl || panelOpenerEl;
+    tick();
+    // Move focus into the panel so it's announced and keyboard users don't
+    // have to tab all the way there.
+    document.getElementById("close-panel").focus();
+  } else if (panelOpenerEl) {
+    panelOpenerEl.focus();
+    panelOpenerEl = null;
+  }
 }
 
 // Next `n` arrival times at `station`, split by direction. Eastbound trunk
@@ -694,13 +735,45 @@ function setupDisclaimer() {
     return;
   }
 
-  okBtn.addEventListener("click", () => {
+  // Keep the rest of the page out of the tab order and the accessibility
+  // tree while this (non-skippable, first-visit) dialog is open, and land
+  // keyboard focus on its one actionable control.
+  const background = document.querySelectorAll("body > header, body > main, body > footer");
+  background.forEach((el) => el.setAttribute("inert", ""));
+  okBtn.focus();
+
+  const dismiss = () => {
     overlay.hidden = true;
+    background.forEach((el) => el.removeAttribute("inert"));
     try {
       localStorage.setItem(DISCLAIMER_KEY, "1");
     } catch (e) {
       // Nothing to do — it'll just show again next visit.
     }
+  };
+
+  okBtn.addEventListener("click", dismiss);
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") dismiss();
+  });
+}
+
+/* ---------------------------------------------------------------------- *
+ *  Keyboard-reachable station list — a non-map way to reach the same
+ *  per-station info, for people who can't usefully operate the map itself
+ *  (screen reader users, or anyone who can't point-and-click precisely).
+ * ---------------------------------------------------------------------- */
+
+function buildStationQuicklist() {
+  const list = document.getElementById("station-quicklist-list");
+  STATIONS.forEach((s) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = s.name;
+    btn.addEventListener("click", () => selectStation(s.id, btn));
+    li.appendChild(btn);
+    list.appendChild(li);
   });
 }
 
@@ -711,6 +784,10 @@ function setupDisclaimer() {
 document.addEventListener("DOMContentLoaded", () => {
   setupDisclaimer();
   buildMap();
+  buildStationQuicklist();
   document.getElementById("close-panel").addEventListener("click", () => selectStation(selectedStationId));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && selectedStationId) selectStation(selectedStationId);
+  });
   requestAnimationFrame(scheduleNextTick);
 });

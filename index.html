@@ -31,7 +31,7 @@
         ανταπόκριση που προκύψει από τη χρήση αυτής της πληροφορίας· για κρίσιμες μετακινήσεις, επιβεβαίωνε
         πάντα τα δρομολόγια απευθείας από την THEMA.
       </p>
-      <button id="disclaimer-ok" class="disclaimer-btn">Κατάλαβα</button>
+      <button id="disclaimer-ok" class="disclaimer-btn" type="button">Κατάλαβα</button>
     </div>
   </div>
 
@@ -46,7 +46,15 @@
   </header>
 
   <main class="map-shell">
-    <div id="metro-map" role="img" aria-label="Πραγματικός χάρτης της Θεσσαλονίκης με τη γραμμή του Μετρό και τις θέσεις των συρμών"></div>
+    <nav class="sr-only-focusable station-quicklist" aria-label="Γρήγορη επιλογή σταθμού">
+      <h2>Σταθμοί</h2>
+      <p>Εναλλακτική στον χάρτη: επίλεξε έναν σταθμό από τη λίστα για τις επόμενες αφίξεις.</p>
+      <ul id="station-quicklist-list"></ul>
+    </nav>
+
+    <div id="metro-map" role="region" aria-label="Διαδραστικός χάρτης της Θεσσαλονίκης με τη γραμμή του Μετρό και τις εκτιμώμενες θέσεις συρμών"></div>
+
+    <div id="a11y-announcer" class="sr-only" aria-live="polite"></div>
 
     <div class="float float--status">
       <span id="status-pill" class="pill pill--muted">—</span>
@@ -68,10 +76,10 @@
       <div class="legend-item"><span class="legend-dot legend-dot--b"></span> Προς Μίκρα (Καλαμαριά)</div>
     </div>
 
-    <aside id="station-panel" class="float float--panel" hidden>
+    <aside id="station-panel" class="float float--panel" role="region" aria-labelledby="station-panel-title" hidden>
       <div class="station-panel-header">
         <h3 id="station-panel-title">—</h3>
-        <button id="close-panel" class="icon-btn" aria-label="Κλείσιμο">✕</button>
+        <button id="close-panel" class="icon-btn" type="button" aria-label="Κλείσιμο">✕</button>
       </div>
       <div id="station-panel-lists" class="station-panel-lists"></div>
     </aside>
