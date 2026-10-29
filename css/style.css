@@ -263,22 +263,36 @@ html, body {
 
 .station-tooltip::before { display: none !important; }
 
-/* Train markers */
+/* Train markers — a stylized top-down train (hull, windows, a headlight
+   marking the front), rotated to face its actual direction of travel. */
 .train-marker {
   transition: transform 0.95s linear, opacity 0.4s ease;
   pointer-events: none;
 }
 
-.train-glow, .train-core {
-  position: absolute;
-  border-radius: 50%;
+.train-body {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.95s linear;
+  transform-origin: 50% 50%;
 }
 
-.train-glow { inset: -1px; background: rgba(224, 25, 126, 0.22); }
-.train-core { inset: 6px; background: var(--train-a); border: 2px solid #ffffff; box-shadow: 0 1px 4px rgba(16, 24, 40, 0.35); }
+.train-svg { overflow: visible; }
 
-.train-marker--branch-b .train-glow { background: rgba(79, 154, 11, 0.22); }
-.train-marker--branch-b .train-core { background: var(--train-b); }
+.train-hull {
+  fill: var(--train-a);
+  stroke: #ffffff;
+  stroke-width: 1.4;
+  filter: drop-shadow(0 1.5px 2px rgba(16, 24, 40, 0.35));
+}
+.train-marker--branch-b .train-hull { fill: var(--train-b); }
+
+.train-window { fill: rgba(255, 255, 255, 0.82); }
+.train-light { fill: #fff6d6; filter: drop-shadow(0 0 2px rgba(255, 246, 214, 0.9)); }
+.train-shadow { fill: rgba(16, 24, 40, 0.16); }
 
 /* ---------------------------------------------------------------------- */
 /* Legend */
@@ -487,5 +501,5 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .train-marker, .station-dot { transition: none !important; }
+  .train-marker, .station-dot, .train-body { transition: none !important; }
 }

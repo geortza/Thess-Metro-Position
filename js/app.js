@@ -210,6 +210,25 @@ function positionAlong(points, frac) {
   };
 }
 
+// Compass bearing (0=N, 90=E, clockwise) between two lat/lng points.
+function bearingDeg(lat1, lng1, lat2, lng2) {
+  const rad = Math.PI / 180;
+  const y = Math.sin((lng2 - lng1) * rad) * Math.cos(lat2 * rad);
+  const x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) - Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lng2 - lng1) * rad);
+  return (Math.atan2(y, x) * (180 / Math.PI) + 360) % 360;
+}
+
+// Bearing of the station-to-station segment a train at `frac` along `points`
+// is currently riding — picks the same segment as positionAlong, so the two
+// always agree on where the train is pointed.
+function bearingAlong(points, frac) {
+  const idx = Math.min(Math.max(frac, 0), 1) * (points.length - 1);
+  let i0 = Math.floor(idx);
+  let i1 = Math.min(i0 + 1, points.length - 1);
+  if (i0 === i1) i0 = Math.max(i0 - 1, 0); // at the very end: reuse the final segment
+  return bearingDeg(points[i0].lat, points[i0].lng, points[i1].lat, points[i1].lng);
+}
+
 /* ---------------------------------------------------------------------- *
  *  Map (Leaflet, real OpenStreetMap-based tiles)
  * ---------------------------------------------------------------------- */
@@ -292,12 +311,20 @@ function buildMap() {
   updateTooltipVisibility();
 
   markerPool = [];
+  const trainSvg = `<div class="train-body"><svg class="train-svg" viewBox="0 0 32 16" width="28" height="14" aria-hidden="true" focusable="false">
+      <ellipse class="train-shadow" cx="16" cy="13.3" rx="11" ry="1.6"></ellipse>
+      <rect class="train-hull" x="2" y="2" width="26" height="10" rx="5"></rect>
+      <rect class="train-window" x="6" y="4.6" width="4.6" height="4.6" rx="1.2"></rect>
+      <rect class="train-window" x="12.2" y="4.6" width="4.6" height="4.6" rx="1.2"></rect>
+      <rect class="train-window" x="18.4" y="4.6" width="4.6" height="4.6" rx="1.2"></rect>
+      <circle class="train-light" cx="27.3" cy="7" r="1.3"></circle>
+    </svg></div>`;
   for (let i = 0; i < 40; i++) {
     const icon = L.divIcon({
       className: "train-marker",
-      html: '<span class="train-glow"></span><span class="train-core"></span>',
-      iconSize: [22, 22],
-      iconAnchor: [11, 11],
+      html: trainSvg,
+      iconSize: [30, 16],
+      iconAnchor: [15, 8],
     });
     const m = L.marker([WEST_TERMINUS.lat, WEST_TERMINUS.lng], { icon, interactive: false, keyboard: false });
     m.addTo(map);
@@ -393,23 +420,23 @@ function trainStateAt(d, branch, now) {
 
   if (now >= j.eastTrunkStart && now <= j.eastTrunkEnd) {
     const frac = (now - j.eastTrunkStart) / TRUNK_H;
-    return { ...positionAlong(TRUNK, frac), direction: "east" };
+    return { ...positionAlong(TRUNK, frac), direction: "east", dirDeg: bearingAlong(TRUNK, frac) };
   }
   if (now > j.eastTrunkEnd && now <= j.eastBranchEnd) {
     const frac = (now - j.eastBranchStart) / brH;
-    return { ...positionAlong(brPoints, frac), direction: "east" };
+    return { ...positionAlong(brPoints, frac), direction: "east", dirDeg: bearingAlong(brPoints, frac) };
   }
   if (now > j.eastBranchEnd && now < j.westBranchStart) {
     // Laid over at the branch terminus.
-    return { ...positionAlong(brPoints, 1), direction: "east" };
+    return { ...positionAlong(brPoints, 1), direction: "east", dirDeg: bearingAlong(brPoints, 1) };
   }
   if (now >= j.westBranchStart && now <= j.westBranchEnd) {
     const frac = 1 - (now - j.westBranchStart) / brH;
-    return { ...positionAlong(brPoints, frac), direction: "west" };
+    return { ...positionAlong(brPoints, frac), direction: "west", dirDeg: (bearingAlong(brPoints, frac) + 180) % 360 };
   }
   if (now > j.westBranchEnd && now <= j.westTrunkEnd) {
     const frac = 1 - (now - j.westTrunkStart) / TRUNK_H;
-    return { ...positionAlong(TRUNK, frac), direction: "west" };
+    return { ...positionAlong(TRUNK, frac), direction: "west", dirDeg: (bearingAlong(TRUNK, frac) + 180) % 360 };
   }
   return null;
 }
@@ -422,10 +449,10 @@ function rampTrainStateAt(insert, now) {
   const branchEnd = insert.leaveNE + BRANCH_H.A;
   if (now <= branchEnd) {
     const frac = 1 - (now - insert.leaveNE) / BRANCH_H.A;
-    return positionAlong(PATH_A, frac);
+    return { ...positionAlong(PATH_A, frac), dirDeg: (bearingAlong(PATH_A, frac) + 180) % 360 };
   }
   const frac = 1 - (now - branchEnd) / TRUNK_H;
-  return positionAlong(TRUNK, frac);
+  return { ...positionAlong(TRUNK, frac), dirDeg: (bearingAlong(TRUNK, frac) + 180) % 360 };
 }
 
 function renderTrains(departures, ramp, now, ext) {
@@ -443,7 +470,10 @@ function renderTrains(departures, ramp, now, ext) {
     marker.setLatLng([pos.lat, pos.lng]);
     marker.setOpacity(1);
     const el = marker.getElement();
-    if (el) el.classList.toggle("train-marker--branch-b", false);
+    if (el) {
+      el.classList.toggle("train-marker--branch-b", false);
+      setTrainRotation(el, pos.dirDeg);
+    }
   }
 
   for (let i = 0; i < departures.length; i++) {
@@ -457,10 +487,21 @@ function renderTrains(departures, ramp, now, ext) {
     marker.setLatLng([state.lat, state.lng]);
     marker.setOpacity(1);
     const el = marker.getElement();
-    if (el) el.classList.toggle("train-marker--branch-b", branch === "B");
+    if (el) {
+      el.classList.toggle("train-marker--branch-b", branch === "B");
+      setTrainRotation(el, state.dirDeg);
+    }
   }
   for (let i = used; i < markerPool.length; i++) markerPool[i].setOpacity(0);
   return used;
+}
+
+// Rotates the train icon's inner wrapper (never the marker's own element —
+// Leaflet uses that one's `transform` for positioning, and overwriting it
+// would break the marker's placement on the map).
+function setTrainRotation(markerEl, dirDeg) {
+  const body = markerEl.querySelector(".train-body");
+  if (body) body.style.transform = `rotate(${(dirDeg - 90).toFixed(1)}deg)`;
 }
 
 function renderStatusBar(parts, sw) {
