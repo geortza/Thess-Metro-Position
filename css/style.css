@@ -486,10 +486,11 @@ html, body {
 @media (max-width: 760px) {
   .float--status { flex-direction: column; align-items: flex-end; }
   .float--panel { left: 14px; right: 14px; width: auto; top: auto; height: 46vh; }
-  /* Too little width for the legend and the extension banner alongside the
-     status cluster — drop both; the map's own line colors still carry the
-     legend's meaning, and the open/closed pill covers the essential state. */
-  .float--legend { display: none; }
+  .float--legend { font-size: 11px; max-width: calc(100vw - 150px); }
+  /* No room for the banner alongside the status cluster at the top on a
+     narrow screen — drop it; the open/closed pill covers the essential
+     state. The legend stays (now bottom-left, clear of the status cluster);
+     the station panel only covers it when a station is actually selected. */
   .float--banner { display: none; }
 }
 
