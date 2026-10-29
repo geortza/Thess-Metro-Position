@@ -225,18 +225,19 @@ const TOOLTIP_OFFSET = {
 };
 
 function buildMap() {
-  map = L.map("metro-map", { zoomControl: true, scrollWheelZoom: true, minZoom: 11, maxZoom: 18 });
+  map = L.map("metro-map", { zoomControl: false, scrollWheelZoom: true, minZoom: 11, maxZoom: 18 });
+  L.control.zoom({ position: "bottomright" }).addTo(map);
 
-  // CARTO's dark basemap now requires a (free) API key and stamps a watermark
-  // on keyless requests, so use Esri's World Dark Gray Canvas instead — no
-  // key needed. It ships as two stacked raster layers: solid base colors,
-  // then roads/labels on top.
-  L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+  // CARTO's basemap now requires a (free) API key and stamps a watermark on
+  // keyless requests, so use Esri's World Light Gray Canvas instead — no key
+  // needed. It ships as two stacked raster layers: solid base colors, then
+  // roads/labels on top.
+  L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
     attribution: 'Basemap &copy; <a href="https://www.esri.com">Esri</a> &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS',
     maxNativeZoom: 16,
     maxZoom: 19,
   }).addTo(map);
-  L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {
+  L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {
     maxNativeZoom: 16,
     maxZoom: 19,
   }).addTo(map);
@@ -245,14 +246,20 @@ function buildMap() {
   map.fitBounds(bounds, { padding: [36, 36] });
 
   linePolylines.trunk = L.polyline(TRUNK.map((s) => [s.lat, s.lng]), {
-    color: "#12c7b8", weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round",
+    color: "#0ea99b", weight: 5, opacity: 0.95, lineCap: "round", lineJoin: "round",
+    className: "line-glow",
   }).addTo(map);
   linePolylines.a = L.polyline(PATH_A.map((s) => [s.lat, s.lng]), {
-    color: "#3b8bff", weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round",
+    color: "#2f6fe0", weight: 5, opacity: 0.95, lineCap: "round", lineJoin: "round",
+    className: "line-glow",
   }).addTo(map);
   linePolylines.ext = L.polyline(PATH_B.map((s) => [s.lat, s.lng]), {
-    color: "#ffb648", weight: 4, opacity: 0.55, dashArray: "2 10", lineCap: "round", lineJoin: "round",
+    color: "#c97a12", weight: 4, opacity: 0.6, dashArray: "2 10", lineCap: "round", lineJoin: "round",
+    className: "line-glow",
   }).addTo(map);
+  setGlowColor(linePolylines.trunk, "rgba(14,169,155,0.6)");
+  setGlowColor(linePolylines.a, "rgba(47,111,224,0.6)");
+  setGlowColor(linePolylines.ext, "rgba(201,122,18,0.5)");
 
   STATIONS.forEach((s) => {
     const big = s.terminus || s.junction;
@@ -301,8 +308,17 @@ function buildMap() {
   window.addEventListener("resize", () => map.invalidateSize());
 }
 
+// Leaflet's polyline options have no inline-style hook, so the glow color
+// (a CSS custom property read by the .line-glow filter in style.css) is set
+// directly on the rendered <path> element.
+function setGlowColor(polyline, color) {
+  const el = polyline.getElement();
+  if (el) el.style.setProperty("--glow-color", color);
+}
+
 function updateExtensionLineStyle(ext) {
-  linePolylines.ext.setStyle(ext ? { dashArray: null, opacity: 0.92, color: "#12c7b8" } : { dashArray: "2 10", opacity: 0.55, color: "#ffb648" });
+  linePolylines.ext.setStyle(ext ? { dashArray: null, opacity: 0.95, color: "#0ea99b" } : { dashArray: "2 10", opacity: 0.6, color: "#c97a12" });
+  setGlowColor(linePolylines.ext, ext ? "rgba(14,169,155,0.6)" : "rgba(201,122,18,0.5)");
   Object.entries(stationMarkers).forEach(([id, marker]) => {
     const s = STATIONS.find((st) => st.id === id);
     if (!s.extension) return;
@@ -491,15 +507,14 @@ function renderFleetPill(activeCount, ext) {
 
 function renderExtensionBanner(parts, ext) {
   const banner = document.getElementById("extension-banner");
+  banner.classList.toggle("extension-banner--live", ext);
   if (ext) {
     banner.textContent = "Η επέκταση προς Καλαμαριά (5 νέοι σταθμοί από 25ης Μαρτίου) είναι σε λειτουργία.";
-    banner.className = "extension-banner extension-banner--live";
   } else {
     const days = daysUntilExtension(parts);
     banner.textContent = days > 0
       ? `Επέκταση Καλαμαριάς: ανοίγει σε ${days} ${days === 1 ? "ημέρα" : "ημέρες"} (27/08/2026), από τη διακλάδωση στον σταθμό 25ης Μαρτίου.`
       : "Επέκταση Καλαμαριάς: ανοίγει σήμερα.";
-    banner.className = "extension-banner";
   }
 }
 

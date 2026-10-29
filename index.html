@@ -5,14 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Θεσσαλονίκη Metro · Live θέσεις συρμών</title>
   <meta name="description" content="Εκτιμώμενη ζωντανή θέση των συρμών του Μετρό Θεσσαλονίκης, βάσει του ωρολογίου προγράμματος." />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2312c7b8'/%3E%3Ctext x='50' y='68' font-size='55' text-anchor='middle' fill='%230b1220' font-family='sans-serif'%3EM%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%230ea99b'/%3E%3Ctext x='50' y='68' font-size='55' text-anchor='middle' fill='%23ffffff' font-family='sans-serif'%3EM%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="vendor/fonts/fonts.css" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <div class="bg-grid"></div>
-
   <div id="disclaimer-overlay" class="disclaimer-overlay" role="dialog" aria-modal="true" aria-labelledby="disclaimer-title">
     <div class="disclaimer-card">
       <h2 id="disclaimer-title">Πριν ξεκινήσεις</h2>
@@ -45,33 +43,31 @@
         <p>Ζωντανή εκτίμηση θέσης συρμών</p>
       </div>
     </div>
+  </header>
 
-    <div class="status-cluster">
+  <main class="map-shell">
+    <div id="metro-map" role="img" aria-label="Πραγματικός χάρτης της Θεσσαλονίκης με τη γραμμή του Μετρό και τις θέσεις των συρμών"></div>
+
+    <div class="float float--status">
+      <span id="status-pill" class="pill pill--muted">—</span>
       <div class="clock-block">
         <span id="clock" class="clock">--:--:--</span>
         <span id="day-name" class="day-name">—</span>
       </div>
-      <span id="status-pill" class="pill pill--muted">—</span>
       <span id="headway-pill" class="pill pill--muted">—</span>
       <span id="fleet-pill" class="pill pill--fleet">—</span>
     </div>
-  </header>
 
-  <div id="extension-banner" class="extension-banner"></div>
+    <div id="extension-banner" class="float float--banner"></div>
 
-  <main class="layout">
-    <section class="map-card">
-      <div id="metro-map" role="img" aria-label="Πραγματικός χάρτης της Θεσσαλονίκης με τη γραμμή του Μετρό και τις θέσεις των συρμών"></div>
+    <div class="float float--legend">
+      <div class="legend-item"><span class="legend-swatch legend-swatch--line"></span> Γραμμή 1</div>
+      <div class="legend-item"><span class="legend-swatch legend-swatch--ext"></span> Επέκταση Καλαμαριάς</div>
+      <div class="legend-item"><span class="legend-dot legend-dot--a"></span> Δρομολόγιο Νέας Ελβετίας</div>
+      <div class="legend-item"><span class="legend-dot legend-dot--b"></span> Δρομολόγιο Καλαμαριάς</div>
+    </div>
 
-      <div class="legend">
-        <div class="legend-item"><span class="legend-swatch legend-swatch--line"></span> Γραμμή 1</div>
-        <div class="legend-item"><span class="legend-swatch legend-swatch--ext"></span> Επέκταση Καλαμαριάς</div>
-        <div class="legend-item"><span class="legend-dot legend-dot--a"></span> Δρομολόγιο Νέας Ελβετίας</div>
-        <div class="legend-item"><span class="legend-dot legend-dot--b"></span> Δρομολόγιο Καλαμαριάς</div>
-      </div>
-    </section>
-
-    <aside id="station-panel" class="station-panel">
+    <aside id="station-panel" class="float float--panel">
       <div id="station-panel-empty" class="station-panel-empty">
         <p>Πατήστε σε έναν σταθμό στον χάρτη για να δεις τις επόμενες αφίξεις και προς τις δύο κατευθύνσεις.</p>
       </div>
